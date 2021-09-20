@@ -1,0 +1,38 @@
+﻿#define G 9.81
+#define PI 3.14159265
+
+struct Ray{
+    float3 pos;
+    float3 dir;
+    float3 energy;
+};
+
+struct RayHit{
+    float3 pos;
+    float dist;
+    float3 normal;
+    float3 albedo;
+    float3 specular;
+    float smoothness;
+    float3 emission;
+};
+
+struct Sphere{
+    float3 pos;
+    float radius;
+    float3 albedo;
+    float3 specular;
+    float smoothness;
+    float3 emission;
+};
+
+struct MeshObject
+{
+    float4x4 localToWorldMatrix;
+    int indiceOffset;
+    int indiceCount;
+    float3 albedo;
+    float3 specular;
+    float smoothness;
+    float3 emission;
+};
