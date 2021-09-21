@@ -1,0 +1,22 @@
+#ifndef _SHADING_COMPUTE
+#define _SHADING_COMPUTE
+
+#include "Struct.compute"
+
+float3 FresnelSchlick(float3 col, float ldoth){
+	return col + (1 - col) * pow(1 - ldoth, 5);
+}
+
+float GGXTerm(float r2, float ndoth){
+	float r4 = r2 * r2;
+	half d = (ndoth * r4 - ndoth) * ndoth + 1.0;
+	return r4 * INV_PI / (d * d + 1e-8);
+
+}
+
+float GGXShadowTerm(float r2, float ndotv, float ndotl){
+	float ggx0 = ndotl * sqrt(ndotv * ndotv * (1 - r2) + r2);
+	float ggx1 = ndotv * sqrt(ndotl * ndotl * (1 - r2) + r2);
+	return 2.0 * ndotl * ndotv / (ggx0 + ggx1);
+}
+#endif

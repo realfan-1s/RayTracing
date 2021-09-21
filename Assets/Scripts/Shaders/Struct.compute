@@ -1,5 +1,9 @@
-﻿#define G 9.81
+﻿#ifndef _STRUCT_COMPUTE
+#define _STRUCT_COMPUTE
+
+#define G 9.81
 #define PI 3.14159265
+#define INV_PI 0.31830988618
 
 struct Ray{
     float3 pos;
@@ -36,3 +40,4 @@ struct MeshObject
     float smoothness;
     float3 emission;
 };
+#endif

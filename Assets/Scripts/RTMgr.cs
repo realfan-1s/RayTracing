@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using Unity.Mathematics;
+using System.Linq;
 
 public struct Sphere
 {
@@ -47,10 +48,15 @@ public class RTMgr : MonoBehaviour
     private Texture skybox;
     private Material antiAliasing = null;
     private uint currentSample = 0;
-    [Range(1, 8192)]
+    [Range(1, 2048)]
     public uint reflectTimes = 8;
-    public bool WhiteStyleRayTracing = true;
-    private static List<RayTracingObj> meshList = new List<RayTracingObj>();
+    public bool whiteStyleRayTracing = true;
+    public bool UseOutsideModel = false;
+    private static List<RayTracingObj> rayTracingList = new List<RayTracingObj>();
+    private static List<MeshObject> meshList = new List<MeshObject>();
+    private static List<Vector3> verticesList = new List<Vector3>();
+    private static List<int> indicesList = new List<int>();
+    private static bool needRebuildComputeBuffer = false;
     #endregion
 
     #region ("Sphere Parameters")
@@ -77,6 +83,7 @@ public class RTMgr : MonoBehaviour
     /// <param name="dest">The destination RenderTexture.</param>
     void OnRenderImage(RenderTexture src, RenderTexture dest)
     {
+        BuildmeshComputeBuffer();
         InitParams();
         Render(dest);
     }
@@ -90,9 +97,11 @@ public class RTMgr : MonoBehaviour
 
     private void OnDestroy() {
         SphereBuffer.Dispose();
-        verticesBuffer.Dispose();
-        indicesBuffer.Dispose();
-        meshObjectBuffer.Dispose();
+        if (UseOutsideModel){
+            verticesBuffer.Dispose();
+            indicesBuffer.Dispose();
+            meshObjectBuffer.Dispose();
+        }
     }
 
     void InitParams(){
@@ -103,13 +112,18 @@ public class RTMgr : MonoBehaviour
         rayTracingCS.SetInt("ReflectTimes", (int)reflectTimes);
         rayTracingCS.SetFloats("Offset", new float[2] {UnityEngine.Random.value, UnityEngine.Random.value});
         rayTracingCS.SetFloat("randSeed", UnityEngine.Random.value);
-        float3 lightDir = directionalLight.transform.forward;
+        float3 lightDir = -1 * directionalLight.transform.forward;
         rayTracingCS.SetVector("directionalLight", new float4(lightDir.x, lightDir.y, lightDir.z, directionalLight.intensity));
+        rayTracingCS.SetVector("lightColor", new float4(directionalLight.color.r, directionalLight.color.g, directionalLight.color.b, 1.0f));
 #if UNITY_2020_1_OR_NEWER
-        if (WhiteStyleRayTracing)
+        if (whiteStyleRayTracing)
             rayTracingCS.EnableKeyword("_WHITE_STYLE");
         else
             rayTracingCS.DisableKeyword("_WHITE_STYLE");
+        if (UseOutsideModel)
+            rayTracingCS.EnableKeyword("_USE_OUTSIDE_MODEL");
+        else
+            rayTracingCS.DisableKeyword("_USE_OUTSIDE_MODEL");
 #endif
     }
     void InitRenderTexture(){
@@ -148,6 +162,10 @@ public class RTMgr : MonoBehaviour
         currentSample++;
     }
     void SetSphere(){
+        if (UseOutsideModel){
+            return;
+        }
+
         UnityEngine.Random.InitState(sphereSeed);
         Sphere[] data = new Sphere[sphereCount];
         for (int i = 0; i < sphereCount; ++i){
@@ -175,7 +193,7 @@ public class RTMgr : MonoBehaviour
                 sphere.albedo = float3.zero;
                 sphere.specular = float3.zero;
                 sphere.smoothness = 0.0f;
-                Color emission = UnityEngine.Random.ColorHSV();
+                Color emission = UnityEngine.Random.ColorHSV(0, 1, 0, 1, 3, 8);
                 sphere.emission = new float3(emission.r, emission.g, emission.b);
             }
             data[i] = sphere;
@@ -185,11 +203,69 @@ public class RTMgr : MonoBehaviour
         }
         SphereBuffer.SetData(data);
     }
+    void BuildmeshComputeBuffer(){
+        if (!UseOutsideModel || !needRebuildComputeBuffer)
+            return;
+
+        needRebuildComputeBuffer = false;
+        currentSample = 0;
+        meshList.Clear();
+        verticesList.Clear();
+        indicesList.Clear();
+
+        int nums = rayTracingList.Count;
+        for (int i = 0; i < nums; ++i){
+            Mesh mesh = rayTracingList[i].GetComponent<MeshFilter>().sharedMesh;
+
+            int firstVertex = verticesList.Count;
+            verticesList.AddRange(mesh.vertices);
+            int firstIndex = indicesList.Count;
+            var indices = mesh.GetIndices(0);
+            indicesList.AddRange(indices.Select(index => index + firstVertex));
+
+            meshList.Add(new MeshObject(){
+                localToWorldMatrix = rayTracingList[i].transform.localToWorldMatrix,
+                indiceOffset = firstIndex,
+                indiceCount = indices.Length,
+                albedo = rayTracingList[i].albedo,
+                specular = rayTracingList[i].specular,
+                smoothness = rayTracingList[i].smoothness,
+                emission = rayTracingList[i].emission,
+            });
+        }
+
+        GenerateComputeBuffer(ref meshObjectBuffer, meshList, 112);
+        GenerateComputeBuffer(ref verticesBuffer, verticesList, 12);
+        GenerateComputeBuffer(ref indicesBuffer, indicesList, 4);
+
+        rayTracingCS.SetBuffer(kernelRayTracing, "meshObjectBuffer", meshObjectBuffer);
+        rayTracingCS.SetBuffer(kernelRayTracing, "verticesBuffer", verticesBuffer);
+        rayTracingCS.SetBuffer(kernelRayTracing, "indicesBuffer", indicesBuffer);
+    }
     public static void RegisterMesh(RayTracingObj obj){
-        meshList.Add(obj);
+        rayTracingList.Add(obj);
+        needRebuildComputeBuffer = true;
     }
     public static void UnregisterMesh(RayTracingObj obj){
-        meshList.Remove(obj);
+        rayTracingList.Remove(obj);
+        needRebuildComputeBuffer = true;
     }
-
+    private static void GenerateComputeBuffer<T>(ref ComputeBuffer buffer, List<T> data, int stride) where T : struct{
+        if (buffer != null)
+        {
+            if (data.Count == 0 || buffer.count != data.Count || buffer.stride != stride)
+            {
+                buffer.Release();
+                buffer = null;
+            }
+        }
+        if (data.Count != 0)
+        {
+            if (buffer == null)
+            {
+                buffer = new ComputeBuffer(data.Count, stride);
+            }
+            buffer.SetData(data);
+        }
+    }
 }

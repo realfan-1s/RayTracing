@@ -1,5 +1,6 @@
 ﻿#pragma kernel RayTracing
 #pragma multi_compile_local __ _WHITE_STYLE
+#pragma multi_compile_local __ _USE_OUTSIDE_MODEL
 
 #include "Struct.compute"
 
@@ -9,21 +10,27 @@ RWTexture2D<float4> Result;
 TextureCube<float4> Skybox;
 // 采样器名称必须和纹理名称完全一致再在前面加上sampler
 SamplerState samplerSkybox;
+StructuredBuffer<MeshObject> meshObjectBuffer;
+StructuredBuffer<float3> verticesBuffer;
+StructuredBuffer<int> indicesBuffer;
 StructuredBuffer<Sphere> SphereBuffer;
 float2 Offset;
 float4x4 CameraToWorld;
 float4x4 CameraInverseProjection;
 uint ReflectTimes;
 float4 directionalLight;
+float3 lightColor;
 float randSeed;
 
 Ray PrimaryRayFromCam(float2 uv);
 RayHit PathTrace(Ray ray);
 void IntersectGroundPlane(Ray ray, inout RayHit hit);
 void IntersectSphere(Ray ray, inout RayHit hit, uint i);
-bool InterseTriangle(Ray ray, float3 vert0, float3 vert1, float3 vert2, inout float t, inout float u, inout float v);
+bool IntersectTriangle(Ray ray, float3 vert0, float3 vert1, float3 vert2, inout float t, inout float u, inout float v);
+void IntersectObject(Ray ray, inout RayHit hit, MeshObject object);
 float3 Shading(inout Ray ray, RayHit hit, uint2 idxy);
-float3 HemiSpehereSampling(uint2 idxy, float3 normal, float alpha);
+float3 HemiSpehereSampling(uint2 idxy, float3 normal, float alpha = 0.0);
+float3 GGXSampling(uint2 idxy, float3 normal, float roughness);
 float3x3 ToTangentSpace(float3 normal);
 Ray GenerateRay(float3 position, float3 direction);
 RayHit GenerateRayHit();
@@ -42,6 +49,15 @@ void RayTracing (uint3 id : SV_DispatchThreadID)
 
     for (uint i = 0; i < ReflectTimes; ++i){
         RayHit hit = PathTrace(ray);
+        float isEmssion = dot(hit.emission, float3(1, 1, 1));
+        if (isEmssion < 1e-8){
+            Ray shadowRay = GenerateRay(hit.pos + hit.normal * 0.001, directionalLight.xyz + HemiSpehereSampling(id.xy, hit.normal) * 0.4);
+            RayHit shadowHit = PathTrace(shadowRay);
+            isEmssion = dot(shadowHit.emission, float3(1, 1, 1));
+            if (shadowHit.dist != 1.#INF && isEmssion < 1e-8){
+                break;
+            }
+        }
         result += ray.energy * Shading(ray, hit, id.xy);
 
         if (!any(ray.energy))
@@ -80,32 +96,18 @@ Ray PrimaryRayFromCam(float2 uv){
 
 RayHit PathTrace(Ray ray){
     RayHit hit = GenerateRayHit();
-    uint sphereCount, strides;
-    SphereBuffer.GetDimensions(sphereCount, strides);
-    for (uint i = 0; i < sphereCount; ++i){
+    IntersectGroundPlane(ray, hit);
+    uint meshCount, strides, i;
+#if _USE_OUTSIDE_MODEL
+    meshObjectBuffer.GetDimensions(meshCount, strides);
+    for (i = 0; i < meshCount; ++i)
+        IntersectObject(ray, hit, meshObjectBuffer[i]);
+#else
+    SphereBuffer.GetDimensions(meshCount, strides);
+    for (i = 0; i < meshCount; ++i){
         IntersectSphere(ray, hit, i);
     }
-    IntersectGroundPlane(ray, hit);
-
-    // Trace single triangle
-    float3 v0 = float3(-150, 0, -150);
-    float3 v1 = float3(150, 0, -150);
-    float3 v2 = float3(0, 150 * sqrt(2), -150);
-    float t, u, v;
-    if (InterseTriangle(ray, v0, v1, v2, t, u, v))
-    {
-        if (t > 0 && t < hit.dist)
-        {
-            hit.dist = t;
-            hit.pos = ray.pos + t * ray.dir;
-            hit.normal = normalize(cross(v1 - v0, v2 - v0));
-            hit.albedo = 0.00f;
-            hit.specular = 0.65f * float3(1, 0.4f, 0.2f);
-            hit.smoothness = 0.9f;
-            hit.emission = 0.0f;
-        }
-    }
-
+#endif
     return hit;
 }
 
@@ -117,10 +119,10 @@ void IntersectGroundPlane(Ray ray, inout RayHit hit)
         hit.dist = t;
         hit.pos = ray.pos + t * ray.dir;
         hit.normal = float3(0.0, 1.0, 0.0);
-        hit.albedo = float3(0.3, 0.3, 0.3);
+        hit.albedo = float3(0.6, 0.6, 0.6);
         hit.specular = float3(0.4, 0.4, 0.4);
         hit.smoothness = 0.2;
-        hit.emission = float3(0.04, 0.04, 0.04);
+        hit.emission = float3(0.0, 0.0, 0.0);
     }
 }
 
@@ -144,7 +146,7 @@ void IntersectSphere(Ray ray, inout RayHit hit, uint index){
     }
 }
 
-bool InterseTriangle(Ray ray, float3 vert0, float3 vert1, float3 vert2, inout float t, inout float u, inout float v){
+bool IntersectTriangle(Ray ray, float3 vert0, float3 vert1, float3 vert2, inout float t, inout float u, inout float v){
     float3 edge1 = vert1 - vert0;
     float3 edge2 = vert2 - vert0;
     float3 s = ray.pos - vert0;
@@ -164,23 +166,40 @@ bool InterseTriangle(Ray ray, float3 vert0, float3 vert1, float3 vert2, inout fl
     return true;
 }
 
+void IntersectObject(Ray ray, inout RayHit hit, MeshObject object){
+    uint offset = object.indiceOffset;
+    uint count = offset + object.indiceCount;
+    for (uint i = offset; i < count; i += 3){
+        float3 v0 = mul(object.localToWorldMatrix, float4(verticesBuffer[indicesBuffer[i]], 1)).xyz;
+        float3 v1 = mul(object.localToWorldMatrix, float4(verticesBuffer[indicesBuffer[i + 1]], 1)).xyz;
+        float3 v2 = mul(object.localToWorldMatrix, float4(verticesBuffer[indicesBuffer[i + 2]], 1)).xyz;
+        float t, u, v;
+        if (IntersectTriangle(ray, v0, v1, v2, t, u, v))
+        {
+            if (t > 0 && t < hit.dist)
+            {
+                hit.dist = t;
+                hit.pos = ray.pos + t * ray.dir;
+                hit.normal = normalize(cross(v1 - v0, v2 - v0));
+                hit.albedo = object.albedo;
+                hit.specular = object.specular;
+                hit.smoothness = object.smoothness;
+                hit.emission = object.emission;
+            }
+        }
+    }
+}
+
 float3 Shading(inout Ray ray, RayHit hit, uint2 idxy){
     if (hit.dist < 1.#INF){
         ray.pos = hit.pos + hit.normal * 0.001;
-        float3 relfection = reflect(ray.dir, hit.normal);
+        float3 reflection = reflect(ray.dir, hit.normal);
 #if _WHITE_STYLE
-        ray.dir = relfection;
+        ray.dir = reflection;
         ray.energy *= hit.specular;
-        // shadow map generate
-        Ray shadowRay = GenerateRay(hit.pos + hit.normal * 0.001, -1 * directionalLight.xyz);
-        RayHit shadowHit = PathTrace(shadowRay);
-        if (shadowHit.dist != 1.#INF){
-            return float3(0.0, 0.0, 0.0);
-        }
         // 光线和光线指向相反的方向，因此对于正面照明，点积返回 -1 而不是 1。我们需要翻转标志来弥补这一点
-        return saturate(dot(hit.normal, directionalLight.xyz) * -1) * directionalLight.w * hit.albedo;
+        return saturate(dot(hit.normal, directionalLight.xyz)) * directionalLight.w * hit.albedo;
 #else
-        // TODO: Diffuse 目前采用的是lambert-Phong着色，随后可以修正为Disney Principle pbr
         hit.albedo = min(1 - hit.specular, hit.albedo);
         float diffuseChance = dot(hit.albedo, 1.0 / 3.0);
         float specularChance = dot(hit.specular, 1.0 / 3.0);
@@ -193,13 +212,13 @@ float3 Shading(inout Ray ray, RayHit hit, uint2 idxy){
         } else if (specularChance > 0 && judge < specularChance + diffuseChance){
             // 采用高光反射
             float alpha = SmoothPhongAlpha(hit.smoothness);
-            ray.dir = HemiSpehereSampling(idxy, relfection, alpha);
+            ray.dir = HemiSpehereSampling(idxy, reflection, alpha);
             float f = (alpha + 2) / (alpha + 1);
             ray.energy *= hit.specular * Sdot(ray.dir, hit.normal, f) * (1.0 / specularChance);
         } else{
-            // 自发光
             ray.energy = 0.0f;
         }
+        ray.energy *= directionalLight.w * lightColor.xyz;
         return hit.emission;
 #endif
     } else {
@@ -241,5 +260,5 @@ float Sdot(float3 x, float3 y, float f)
 
 float SmoothPhongAlpha(float smoothness)
 {
-    return pow(10000.0, smoothness);
+    return pow(1000.0, smoothness * smoothness);
 }
