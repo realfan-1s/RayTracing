@@ -9,6 +9,9 @@ public struct Sphere
     public float radius;
     public float3 albedo;
     public float3 specular;
+    public float metallic;
+    public float roughness;
+    public float subsurface;
     public float smoothness;
     public float3 emission;
 }
@@ -20,6 +23,9 @@ public struct MeshObject
     public int indiceCount;
     public float3 albedo;
     public float3 specular;
+    public float metallic;
+    public float roughness;
+    public float subsurface;
     public float smoothness;
     public float3 emission;
 
@@ -48,7 +54,7 @@ public class RTMgr : MonoBehaviour
     private Texture skybox;
     private Material antiAliasing = null;
     private uint currentSample = 0;
-    [Range(1, 2048)]
+    [Range(1, 8192)]
     public uint reflectTimes = 8;
     public bool whiteStyleRayTracing = true;
     public bool UseOutsideModel = false;
@@ -70,7 +76,7 @@ public class RTMgr : MonoBehaviour
     public Light directionalLight;
     private void Awake() {
         kernelRayTracing = rayTracingCS.FindKernel("RayTracing");
-        SphereBuffer = new ComputeBuffer((int)sphereCount, 56, ComputeBufferType.Append);
+        SphereBuffer = new ComputeBuffer((int)sphereCount, 68, ComputeBufferType.Append);
     }
 
     private void Start() {
@@ -187,12 +193,18 @@ public class RTMgr : MonoBehaviour
                 Color color = UnityEngine.Random.ColorHSV();
                 sphere.albedo = chance < 0.4f ? float3.zero : new float3(color.r, color.g, color.b);
                 sphere.specular = chance < 0.4f ? new float3(color.r, color.g, color.b) : new float3(0.04f, 0.04f, 0.04f);
-                sphere.smoothness = UnityEngine.Random.value;
+                sphere.metallic = UnityEngine.Random.value;
+                sphere.roughness = math.sin(2 * Mathf.PI * UnityEngine.Random.value);
+                sphere.subsurface = 1 - UnityEngine.Random.value;
+                sphere.smoothness = 0.99f;
                 sphere.emission = float3.zero;
             } else {
                 sphere.albedo = float3.zero;
                 sphere.specular = float3.zero;
-                sphere.smoothness = 0.0f;
+                sphere.metallic = 0.0f;
+                sphere.roughness = 0.0f;
+                sphere.subsurface = 0.0f;
+                sphere.smoothness = 0.99f;
                 Color emission = UnityEngine.Random.ColorHSV(0, 1, 0, 1, 3, 8);
                 sphere.emission = new float3(emission.r, emission.g, emission.b);
             }
@@ -229,12 +241,15 @@ public class RTMgr : MonoBehaviour
                 indiceCount = indices.Length,
                 albedo = rayTracingList[i].albedo,
                 specular = rayTracingList[i].specular,
+                metallic = rayTracingList[i].metallic,
+                roughness = rayTracingList[i].roughness,
+                subsurface = rayTracingList[i].subsurface,
                 smoothness = rayTracingList[i].smoothness,
                 emission = rayTracingList[i].emission,
             });
         }
 
-        GenerateComputeBuffer(ref meshObjectBuffer, meshList, 112);
+        GenerateComputeBuffer(ref meshObjectBuffer, meshList, 124);
         GenerateComputeBuffer(ref verticesBuffer, verticesList, 12);
         GenerateComputeBuffer(ref indicesBuffer, indicesList, 4);
 

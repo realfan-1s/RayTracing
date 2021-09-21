@@ -3,20 +3,35 @@
 
 #include "Struct.compute"
 
-float3 FresnelSchlick(float3 col, float ldoth){
-	return col + (1 - col) * pow(1 - ldoth, 5);
+float SchlickFresnel(float u){
+	return pow(clamp(1 - u, 0, 1), 5);
 }
 
-float GGXTerm(float r2, float ndoth){
-	float r4 = r2 * r2;
-	half d = (ndoth * r4 - ndoth) * ndoth + 1.0;
-	return r4 * INV_PI / (d * d + 1e-8);
-
+float DiffuseShliick(float roughness, float ldoth, float ndotl, float ndotv){
+	float Fd = 0.5 + 2 * ldoth * ldoth  * roughness;
+	return (1 + (Fd - 1) * SchlickFresnel(ndotl)) * (1 + (Fd - 1) * SchlickFresnel(ndotv));
 }
 
-float GGXShadowTerm(float r2, float ndotv, float ndotl){
-	float ggx0 = ndotl * sqrt(ndotv * ndotv * (1 - r2) + r2);
-	float ggx1 = ndotv * sqrt(ndotl * ndotl * (1 - r2) + r2);
-	return 2.0 * ndotl * ndotv / (ggx0 + ggx1);
+float SubsurfaceScatter(float roughness, float ldoth, float ndotl, float ndotv){
+	float Fss90 = ldoth * ldoth * roughness;
+	float Fss =  (1 + (Fss90 - 1) * pow(1 - ndotl, 5)) * (1 + (Fss90 - 1) * pow(1 - ndotv, 5));
+	return 1.25 * (Fss * (1.0 / (ndotl + ndotv) - 0.5) + 0.5);
+}
+
+float DisneyDiffuse(float roughness, float ldoth, float ndotl, float ndotv, float subsurface){
+	return lerp(DiffuseShliick(roughness, ldoth, ndotl, ndotv), SubsurfaceScatter(roughness, ldoth, ndotl, ndotv), subsurface);
+}
+
+float GGXShadow(float alpha, float ndoth){
+	float a2 = alpha* alpha;
+	float cosTheta = ndoth * ndoth;
+	float density = (1.0 + (a2 - 1.0) * cosTheta);
+	return a2 / (density * density);
+}
+
+float SmithGGX(float alpha, float ndotv, float ndotl){
+	float smith_v = ndotl * (ndotv * (1 - alpha) + alpha);
+	float smith_l = ndotv * (ndotl * (1 - alpha) + alpha);
+	return 0.5 / (smith_l + smith_v);
 }
 #endif

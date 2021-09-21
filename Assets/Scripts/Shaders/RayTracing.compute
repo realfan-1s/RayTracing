@@ -3,9 +3,9 @@
 #pragma multi_compile_local __ _USE_OUTSIDE_MODEL
 
 #include "Struct.compute"
+#include "Shading.compute"
 
-// Create a RenderTexture with enableRandomWrite flag and set it
-// with cs.SetTexture
+// Create a RenderTexture with enableRandomWrite flag and set it with cs.SetTexture
 RWTexture2D<float4> Result;
 TextureCube<float4> Skybox;
 // 采样器名称必须和纹理名称完全一致再在前面加上sampler
@@ -30,7 +30,7 @@ bool IntersectTriangle(Ray ray, float3 vert0, float3 vert1, float3 vert2, inout 
 void IntersectObject(Ray ray, inout RayHit hit, MeshObject object);
 float3 Shading(inout Ray ray, RayHit hit, uint2 idxy);
 float3 HemiSpehereSampling(uint2 idxy, float3 normal, float alpha = 0.0);
-float3 GGXSampling(uint2 idxy, float3 normal, float roughness);
+float3 GGXSampling(uint2 idxy, float3 normal, float r2);
 float3x3 ToTangentSpace(float3 normal);
 Ray GenerateRay(float3 position, float3 direction);
 RayHit GenerateRayHit();
@@ -50,11 +50,11 @@ void RayTracing (uint3 id : SV_DispatchThreadID)
     for (uint i = 0; i < ReflectTimes; ++i){
         RayHit hit = PathTrace(ray);
         float isEmssion = dot(hit.emission, float3(1, 1, 1));
-        if (isEmssion < 1e-8){
+        if (isEmssion == 0){
             Ray shadowRay = GenerateRay(hit.pos + hit.normal * 0.001, directionalLight.xyz + HemiSpehereSampling(id.xy, hit.normal) * 0.4);
             RayHit shadowHit = PathTrace(shadowRay);
             isEmssion = dot(shadowHit.emission, float3(1, 1, 1));
-            if (shadowHit.dist != 1.#INF && isEmssion < 1e-8){
+            if (shadowHit.dist != 1.#INF && isEmssion == 0){
                 break;
             }
         }
@@ -77,6 +77,9 @@ Ray GenerateRay(float3 position, float3 direction){
 RayHit GenerateRayHit(){
     RayHit hit;
     hit.dist = 1.#INF;
+    hit.metallic = 0.0;
+    hit.roughness = 0.0;
+    hit.subsurface = 0.0;
     hit.smoothness = 0.0;
     hit.pos = float3(0.0, 0.0, 0.0);
     hit.normal = float3(0.0, 0.0, 0.0);
@@ -121,7 +124,10 @@ void IntersectGroundPlane(Ray ray, inout RayHit hit)
         hit.normal = float3(0.0, 1.0, 0.0);
         hit.albedo = float3(0.6, 0.6, 0.6);
         hit.specular = float3(0.4, 0.4, 0.4);
-        hit.smoothness = 0.2;
+        hit.metallic = 0.2;
+        hit.roughness = 0.5;
+        hit.subsurface = 0.5;
+        hit.smoothness = 0.95;
         hit.emission = float3(0.0, 0.0, 0.0);
     }
 }
@@ -141,6 +147,9 @@ void IntersectSphere(Ray ray, inout RayHit hit, uint index){
         hit.normal = normalize(hit.pos - sphere.pos);
         hit.albedo = sphere.albedo;
         hit.specular = sphere.specular;
+        hit.metallic = sphere.metallic;
+        hit.roughness = sphere.roughness;
+        hit.subsurface = sphere.subsurface;
         hit.smoothness = sphere.smoothness;
         hit.emission = sphere.emission;
     }
@@ -183,6 +192,9 @@ void IntersectObject(Ray ray, inout RayHit hit, MeshObject object){
                 hit.normal = normalize(cross(v1 - v0, v2 - v0));
                 hit.albedo = object.albedo;
                 hit.specular = object.specular;
+                hit.metallic = object.metallic;
+                hit.roughness = object.roughness;
+                hit.subsurface = object.subsurface;
                 hit.smoothness = object.smoothness;
                 hit.emission = object.emission;
             }
@@ -201,24 +213,30 @@ float3 Shading(inout Ray ray, RayHit hit, uint2 idxy){
         return saturate(dot(hit.normal, directionalLight.xyz)) * directionalLight.w * hit.albedo;
 #else
         hit.albedo = min(1 - hit.specular, hit.albedo);
+        float ndotl = dot(hit.normal, directionalLight.xyz);
+        float ndotv = dot(hit.normal, -ray.dir);
+        float3 halfDir = normalize(directionalLight.xyz - ray.dir);
+        float ndoth = dot(hit.normal, halfDir);
+        float ldoth = dot(directionalLight.xyz, halfDir);
+        float r2 = hit.roughness * hit.roughness;
+
         float diffuseChance = dot(hit.albedo, 1.0 / 3.0);
         float specularChance = dot(hit.specular, 1.0 / 3.0);
         float judge = Rand(idxy);
 
         if (judge < diffuseChance){
             // 采用漫反射
-            ray.dir = HemiSpehereSampling(idxy, hit.normal, 1.0);
-            ray.energy *= hit.albedo * (1.0 / diffuseChance);
+            ray.dir = HemiSpehereSampling(idxy, hit.normal, SmoothPhongAlpha(hit.smoothness));
+            ray.energy *= hit.albedo * DisneyDiffuse(hit.roughness, ldoth, ndotl, ndotv, hit.subsurface) * (2.0 / diffuseChance) * (1 - hit.metallic);
         } else if (specularChance > 0 && judge < specularChance + diffuseChance){
             // 采用高光反射
-            float alpha = SmoothPhongAlpha(hit.smoothness);
-            ray.dir = HemiSpehereSampling(idxy, reflection, alpha);
-            float f = (alpha + 2) / (alpha + 1);
-            ray.energy *= hit.specular * Sdot(ray.dir, hit.normal, f) * (1.0 / specularChance);
+            ray.dir = GGXSampling(idxy, reflection, r2);
+            float3 f = lerp(hit.specular, float3(1.0, 1.0, 1.0), SchlickFresnel(ldoth));
+            ray.energy *= f * SmithGGX(r2, ndotv, ndotl) * GGXShadow(r2, ndoth) * (2.0 / specularChance);
         } else{
             ray.energy = 0.0f;
         }
-        ray.energy *= directionalLight.w * lightColor.xyz;
+        ray.energy *= directionalLight.w * lightColor.xyz * max(0, ndotl);
         return hit.emission;
 #endif
     } else {
@@ -237,6 +255,15 @@ float3 HemiSpehereSampling(uint2 idxy, float3 normal, float alpha){
     return mul(samplingDir, ToTangentSpace(normal));
 }
 
+float3 GGXSampling(uint2 idxy, float3 normal, float r2){
+    float random = Rand(idxy);
+    float cosTheta = sqrt((1.0 - random) / (1.0 + (r2 - 1.0f) * random));
+    float sinTheta = sqrt(saturate(1.0 - cosTheta * cosTheta));
+    float phi = 2 * PI * random;
+    float3 samplingDir = float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+    return mul(samplingDir, ToTangentSpace(normal));
+}
+
 float3x3 ToTangentSpace(float3 normal){
     float3 assist = float3(1.0, 0.0, 0.0);
     if (abs(normal.x) > 0.99)
@@ -251,11 +278,6 @@ float Rand(uint2 seed){
     float result = frac(sin(randSeed / 100.0 * dot(seed, float2(12.9898, 78.233))) * 43758.5453);
     randSeed += 1.0;
     return result;
-}
-
-float Sdot(float3 x, float3 y, float f)
-{
-    return saturate(dot(x, y) * f);
 }
 
 float SmoothPhongAlpha(float smoothness)

@@ -17,6 +17,9 @@ struct RayHit{
     float3 normal;
     float3 albedo;
     float3 specular;
+    float metallic;
+    float roughness;
+    float subsurface;
     float smoothness;
     float3 emission;
 };
@@ -26,6 +29,9 @@ struct Sphere{
     float radius;
     float3 albedo;
     float3 specular;
+    float metallic;
+    float roughness;
+    float subsurface;
     float smoothness;
     float3 emission;
 };
@@ -37,6 +43,9 @@ struct MeshObject
     int indiceCount;
     float3 albedo;
     float3 specular;
+    float metallic;
+    float roughness;
+    float subsurface;
     float smoothness;
     float3 emission;
 };
