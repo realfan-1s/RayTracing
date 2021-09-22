@@ -23,10 +23,10 @@ float DisneyDiffuse(float roughness, float ldoth, float ndotl, float ndotv, floa
 }
 
 float GGXShadow(float alpha, float ndoth){
-	float a2 = alpha* alpha;
+	float a2 = alpha * alpha;
 	float cosTheta = ndoth * ndoth;
 	float density = (1.0 + (a2 - 1.0) * cosTheta);
-	return a2 / (density * density);
+	return (a2 - 1) / (log(a2) * density);
 }
 
 float SmithGGX(float alpha, float ndotv, float ndotl){

@@ -12,7 +12,6 @@ public struct Sphere
     public float metallic;
     public float roughness;
     public float subsurface;
-    public float smoothness;
     public float3 emission;
 }
 
@@ -26,7 +25,6 @@ public struct MeshObject
     public float metallic;
     public float roughness;
     public float subsurface;
-    public float smoothness;
     public float3 emission;
 
 }
@@ -76,7 +74,7 @@ public class RTMgr : MonoBehaviour
     public Light directionalLight;
     private void Awake() {
         kernelRayTracing = rayTracingCS.FindKernel("RayTracing");
-        SphereBuffer = new ComputeBuffer((int)sphereCount, 68, ComputeBufferType.Append);
+        SphereBuffer = new ComputeBuffer((int)sphereCount, 64, ComputeBufferType.Append);
     }
 
     private void Start() {
@@ -194,9 +192,8 @@ public class RTMgr : MonoBehaviour
                 sphere.albedo = chance < 0.4f ? float3.zero : new float3(color.r, color.g, color.b);
                 sphere.specular = chance < 0.4f ? new float3(color.r, color.g, color.b) : new float3(0.04f, 0.04f, 0.04f);
                 sphere.metallic = UnityEngine.Random.value;
-                sphere.roughness = math.sin(2 * Mathf.PI * UnityEngine.Random.value);
-                sphere.subsurface = 1 - UnityEngine.Random.value;
-                sphere.smoothness = 0.99f;
+                sphere.roughness = math.sin(Mathf.PI * UnityEngine.Random.value);
+                sphere.subsurface = math.cos(Mathf.PI * (UnityEngine.Random.value - 0.5f));
                 sphere.emission = float3.zero;
             } else {
                 sphere.albedo = float3.zero;
@@ -204,7 +201,6 @@ public class RTMgr : MonoBehaviour
                 sphere.metallic = 0.0f;
                 sphere.roughness = 0.0f;
                 sphere.subsurface = 0.0f;
-                sphere.smoothness = 0.99f;
                 Color emission = UnityEngine.Random.ColorHSV(0, 1, 0, 1, 3, 8);
                 sphere.emission = new float3(emission.r, emission.g, emission.b);
             }
@@ -244,12 +240,11 @@ public class RTMgr : MonoBehaviour
                 metallic = rayTracingList[i].metallic,
                 roughness = rayTracingList[i].roughness,
                 subsurface = rayTracingList[i].subsurface,
-                smoothness = rayTracingList[i].smoothness,
                 emission = rayTracingList[i].emission,
             });
         }
 
-        GenerateComputeBuffer(ref meshObjectBuffer, meshList, 124);
+        GenerateComputeBuffer(ref meshObjectBuffer, meshList, 120);
         GenerateComputeBuffer(ref verticesBuffer, verticesList, 12);
         GenerateComputeBuffer(ref indicesBuffer, indicesList, 4);
 

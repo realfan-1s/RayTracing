@@ -14,8 +14,6 @@ public class RayTracingObj : MonoBehaviour
     public float roughness = 0.5f;
     [Range(0, 1)]
     public float subsurface = 0.5f;
-    [Range(0, 1)]
-    public float smoothness = 0.95f;
     public Color _emission = new Color(1.0f, 1.0f, 1.0f);
 
     public float3 albedo { get => new float3(_albedo.r, _albedo.g, _albedo.b); }

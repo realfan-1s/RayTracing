@@ -35,8 +35,6 @@ float3x3 ToTangentSpace(float3 normal);
 Ray GenerateRay(float3 position, float3 direction);
 RayHit GenerateRayHit();
 float Rand(uint2 seed);
-float Sdot(float3 x, float3 y, float f);
-float SmoothPhongAlpha(float smoothness);
 
 [numthreads(16, 16, 1)]
 void RayTracing (uint3 id : SV_DispatchThreadID)
@@ -80,7 +78,6 @@ RayHit GenerateRayHit(){
     hit.metallic = 0.0;
     hit.roughness = 0.0;
     hit.subsurface = 0.0;
-    hit.smoothness = 0.0;
     hit.pos = float3(0.0, 0.0, 0.0);
     hit.normal = float3(0.0, 0.0, 0.0);
     hit.specular = float3(0.0, 0.0, 0.0);
@@ -127,7 +124,6 @@ void IntersectGroundPlane(Ray ray, inout RayHit hit)
         hit.metallic = 0.2;
         hit.roughness = 0.5;
         hit.subsurface = 0.5;
-        hit.smoothness = 0.95;
         hit.emission = float3(0.0, 0.0, 0.0);
     }
 }
@@ -150,7 +146,6 @@ void IntersectSphere(Ray ray, inout RayHit hit, uint index){
         hit.metallic = sphere.metallic;
         hit.roughness = sphere.roughness;
         hit.subsurface = sphere.subsurface;
-        hit.smoothness = sphere.smoothness;
         hit.emission = sphere.emission;
     }
 }
@@ -195,7 +190,6 @@ void IntersectObject(Ray ray, inout RayHit hit, MeshObject object){
                 hit.metallic = object.metallic;
                 hit.roughness = object.roughness;
                 hit.subsurface = object.subsurface;
-                hit.smoothness = object.smoothness;
                 hit.emission = object.emission;
             }
         }
@@ -220,15 +214,15 @@ float3 Shading(inout Ray ray, RayHit hit, uint2 idxy){
         float ldoth = dot(directionalLight.xyz, halfDir);
         float r2 = hit.roughness * hit.roughness;
 
-        float diffuseChance = dot(hit.albedo, 1.0 / 3.0);
-        float specularChance = dot(hit.specular, 1.0 / 3.0);
+        float diffuseChance = min(0.8, 1.0 - hit.metallic);
+        float specularChance = 1 - diffuseChance;
         float judge = Rand(idxy);
 
         if (judge < diffuseChance){
             // 采用漫反射
-            ray.dir = HemiSpehereSampling(idxy, hit.normal, SmoothPhongAlpha(hit.smoothness));
+            ray.dir = HemiSpehereSampling(idxy, hit.normal, 1.0);
             ray.energy *= hit.albedo * DisneyDiffuse(hit.roughness, ldoth, ndotl, ndotv, hit.subsurface) * (2.0 / diffuseChance) * (1 - hit.metallic);
-        } else if (specularChance > 0 && judge < specularChance + diffuseChance){
+        } else if (judge < specularChance){
             // 采用高光反射
             ray.dir = GGXSampling(idxy, reflection, r2);
             float3 f = lerp(hit.specular, float3(1.0, 1.0, 1.0), SchlickFresnel(ldoth));
@@ -245,8 +239,7 @@ float3 Shading(inout Ray ray, RayHit hit, uint2 idxy){
     }
 }
 
-// 单位半球面均匀分布采样点生成原理参考http://corysimon.github.io/articles/uniformdistn-on-sphere/
-// Theta表示单位角， phi表示极角, 是使用余弦功率分布将正方形映射到圆盘，以选择分布的形状和密度,产生零功率的均匀分布。
+// 单位半球面均匀分布采样点生成和半球上做重要性采样参考http://corysimon.github.io/articles/uniformdistn-on-sphere/
 float3 HemiSpehereSampling(uint2 idxy, float3 normal, float alpha){
     float cosTheta = pow(Rand(idxy), 1.0 / (alpha + 1.0));
     float sinTheta = sqrt(saturate(1.0 - cosTheta * cosTheta));
@@ -278,9 +271,4 @@ float Rand(uint2 seed){
     float result = frac(sin(randSeed / 100.0 * dot(seed, float2(12.9898, 78.233))) * 43758.5453);
     randSeed += 1.0;
     return result;
-}
-
-float SmoothPhongAlpha(float smoothness)
-{
-    return pow(1000.0, smoothness * smoothness);
 }
