@@ -16,10 +16,12 @@ struct RayHit{
     float dist;
     float3 normal;
     float3 albedo;
-    float3 specular;
+    float specular;
     float metallic;
     float roughness;
-    float subsurface;
+    float specTrans;
+    float relativeIor;
+    float3 transColor;
     float3 emission;
 };
 
@@ -27,10 +29,12 @@ struct Sphere{
     float3 pos;
     float radius;
     float3 albedo;
-    float3 specular;
+    float specular;
     float metallic;
     float roughness;
-    float subsurface;
+    float specTrans;
+    float relativeIor;
+    float3 transColor;
     float3 emission;
 };
 
@@ -40,10 +44,12 @@ struct MeshObject
     int indiceOffset;
     int indiceCount;
     float3 albedo;
-    float3 specular;
+    float specular;
     float metallic;
     float roughness;
-    float subsurface;
+    float specTrans;
+    float relativeIor;
+    float3 transColor;
     float3 emission;
 };
 #endif

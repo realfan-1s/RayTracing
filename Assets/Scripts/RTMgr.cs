@@ -8,10 +8,12 @@ public struct Sphere
     public float3 pos;
     public float radius;
     public float3 albedo;
-    public float3 specular;
+    public float specular;
     public float metallic;
     public float roughness;
-    public float subsurface;
+    public float specTrans;
+    public float relativeIor;
+    public float3 transColor;
     public float3 emission;
 }
 
@@ -21,10 +23,12 @@ public struct MeshObject
     public int indiceOffset;
     public int indiceCount;
     public float3 albedo;
-    public float3 specular;
+    public float specular;
     public float metallic;
     public float roughness;
-    public float subsurface;
+    public float specTrans;
+    public float relativeIor;
+    public float3 transColor;
     public float3 emission;
 
 }
@@ -52,7 +56,7 @@ public class RTMgr : MonoBehaviour
     private Texture skybox;
     private Material antiAliasing = null;
     private uint currentSample = 0;
-    [Range(1, 8192)]
+    [Range(1, 10)]
     public uint reflectTimes = 8;
     public bool whiteStyleRayTracing = true;
     public bool UseOutsideModel = false;
@@ -67,14 +71,15 @@ public class RTMgr : MonoBehaviour
     [Header("Sphere Parameters")]
     public float2 SphereRadius = new float2(3.0f, 8.0f);
     public float SpherePlacementRadius = 100.0f;
-    [Range(1, 100)]
-    public uint sphereCount = 4;
-    public int sphereSeed = 1223832719;
     #endregion
     public Light directionalLight;
+    #region ("Test Paramters")
+    [Range(0.3f, 1)]
+    public float relativeIor;
+    #endregion
     private void Awake() {
         kernelRayTracing = rayTracingCS.FindKernel("RayTracing");
-        SphereBuffer = new ComputeBuffer((int)sphereCount, 64, ComputeBufferType.Append);
+        SphereBuffer = new ComputeBuffer(55, 72, ComputeBufferType.Append);
     }
 
     private void Start() {
@@ -133,13 +138,14 @@ public class RTMgr : MonoBehaviour
     void InitRenderTexture(){
         if (targetRT == null || targetRT.width != Screen.width || targetRT.height != Screen.height){
             if (targetRT != null)
-            {
                 RenderTexture.ReleaseTemporary(targetRT);
-                RenderTexture.ReleaseTemporary(convergeRT);
-            }
             targetRT = RenderTexture.GetTemporary(Screen.width, Screen.height, 0, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
             targetRT.enableRandomWrite = true;
             targetRT.Create();
+        }
+        if (convergeRT == null || convergeRT.width != Screen.width || convergeRT.height != Screen.height){
+            if (convergeRT != null)
+                RenderTexture.ReleaseTemporary(convergeRT);
             convergeRT = RenderTexture.GetTemporary(Screen.width, Screen.height, 0, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
             convergeRT.enableRandomWrite = true;
             convergeRT.Create();
@@ -170,47 +176,79 @@ public class RTMgr : MonoBehaviour
             return;
         }
 
-        UnityEngine.Random.InitState(sphereSeed);
-        Sphere[] data = new Sphere[sphereCount];
-        for (int i = 0; i < sphereCount; ++i){
+        Color color = Color.white;
+        Sphere[] data = new Sphere[55];
+        for (int i = 0; i < 55; i++)
+        {
             Sphere sphere = new Sphere();
-            // Radius and radius
-            sphere.radius = SphereRadius.x + UnityEngine.Random.value * (SphereRadius.y - SphereRadius.x);
-            float2 randomPos = UnityEngine.Random.insideUnitCircle * SpherePlacementRadius;
-            sphere.pos = new float3(randomPos.x, sphere.radius, randomPos.y);
-            // Reject spheres that are intersecting others
-            foreach (Sphere other in data)
+
+            sphere.radius = 10;
+            float intervalX = 3 * sphere.radius;
+            float intervalZ = 4 * sphere.radius;
+            float startX = -4.5f * intervalX;
+            float startZ = 2 * intervalZ;
+
+            int row = i / 11;
+            int col = i % 11;
+            sphere.pos = new float3(startX + col * intervalX, startZ - row * intervalZ,  0);
+            sphere.emission = float3.zero;
+            sphere.relativeIor = relativeIor;
+
+            switch (row)
             {
-                float minDist = sphere.radius + other.radius;
-                if (math.lengthsq(sphere.pos - other.pos) < minDist * minDist)
-                    goto SkipSphere;
+                case 0://metallic row 
+                    sphere.albedo = new float3(1, 0.71f, 0);
+                    sphere.metallic = col * 0.1f;
+                    sphere.transColor = sphere.albedo;
+                    sphere.roughness = 0.1f;
+                    sphere.specular = 0.5f;
+                    sphere.specTrans = 0.0f;
+                    break;
+                case 1:
+                    //specular row
+                    sphere.albedo = new float3(1, 0, 0);
+                    sphere.metallic = 0;
+                    sphere.transColor = sphere.albedo;
+                    sphere.roughness = 0.1f;
+                    sphere.specular = col * 0.1f;
+                    sphere.specTrans = 0.0f;
+
+                    break;
+                case 2:
+                    //roughness row
+                    sphere.albedo = new float3(0, 0.8f, 0.2f);
+                    sphere.metallic = 0;
+                    sphere.transColor = sphere.albedo;
+                    sphere.roughness = col* 0.1f;
+                    sphere.specular = 0.5f;
+                    sphere.specTrans = 0.0f;
+                    break;
+                case 3:
+                    //specTrans row
+                    sphere.albedo = new float3(0.5f, 0.2f, 1);
+                    sphere.metallic = 0;
+                    sphere.transColor = sphere.albedo;
+                    sphere.roughness = 0.1f;
+                    sphere.specular = 0.5f;
+                    sphere.specTrans = col * 0.1f;
+                    break;
+                case 4:
+                    //roughness with specTrans = 1
+                    sphere.albedo = new float3(0.03f, 0.03f, 0.03f);
+                    sphere.metallic = 0;
+                    sphere.transColor = new float3(1, 1, 1);
+                    sphere.roughness = col * 0.1f;
+                    sphere.specular = 0.5f;
+                    sphere.specTrans = 1f;
+                    break;
             }
-            // Albedo and specular color
-            float chance = UnityEngine.Random.value;
-            if (chance < 0.8f){
-                Color color = UnityEngine.Random.ColorHSV();
-                sphere.albedo = chance < 0.4f ? float3.zero : new float3(color.r, color.g, color.b);
-                sphere.specular = chance < 0.4f ? new float3(color.r, color.g, color.b) : new float3(0.04f, 0.04f, 0.04f);
-                sphere.metallic = UnityEngine.Random.value;
-                sphere.roughness = math.sin(Mathf.PI * UnityEngine.Random.value);
-                sphere.subsurface = math.cos(Mathf.PI * (UnityEngine.Random.value - 0.5f));
-                sphere.emission = float3.zero;
-            } else {
-                sphere.albedo = float3.zero;
-                sphere.specular = float3.zero;
-                sphere.metallic = 0.0f;
-                sphere.roughness = 0.0f;
-                sphere.subsurface = 0.0f;
-                Color emission = UnityEngine.Random.ColorHSV(0, 1, 0, 1, 3, 8);
-                sphere.emission = new float3(emission.r, emission.g, emission.b);
-            }
+
             data[i] = sphere;
 
-            SkipSphere:
-                continue;
         }
         SphereBuffer.SetData(data);
     }
+
     void BuildmeshComputeBuffer(){
         if (!UseOutsideModel || !needRebuildComputeBuffer)
             return;
@@ -239,12 +277,14 @@ public class RTMgr : MonoBehaviour
                 specular = rayTracingList[i].specular,
                 metallic = rayTracingList[i].metallic,
                 roughness = rayTracingList[i].roughness,
-                subsurface = rayTracingList[i].subsurface,
+                specTrans = rayTracingList[i].specTrans,
+                relativeIor = rayTracingList[i].relativeIor,
+                transColor =  rayTracingList[i].transColor,
                 emission = rayTracingList[i].emission,
             });
         }
 
-        GenerateComputeBuffer(ref meshObjectBuffer, meshList, 120);
+        GenerateComputeBuffer(ref meshObjectBuffer, meshList, 128);
         GenerateComputeBuffer(ref verticesBuffer, verticesList, 12);
         GenerateComputeBuffer(ref indicesBuffer, indicesList, 4);
 

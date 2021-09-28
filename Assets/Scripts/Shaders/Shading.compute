@@ -3,35 +3,66 @@
 
 #include "Struct.compute"
 
-float SchlickFresnel(float u){
-	return pow(clamp(1 - u, 0, 1), 5);
+float BSDF_Fresnel(float cosThetaI, float etaT, float etaI){
+    if (cosThetaI > 0){
+        etaI -= etaT;
+        etaT += etaI;
+        etaI = etaT - etaI;
+    }
+
+    cosThetaI = abs(cosThetaI);
+    float sinThetaT = etaI / etaT * sqrt(max(0.0, 1 - cosThetaI * cosThetaI));
+    float cosThetaT = sqrt(max(0, 1 - sinThetaT * sinThetaT));
+    float Rs = (etaT * cosThetaI - etaI * cosThetaT) / (etaT * cosThetaI + etaI * cosThetaT);
+    float Rp = (etaI * cosThetaI - etaT * cosThetaT) / (etaI * cosThetaI + etaT * cosThetaT);
+    return (Rs * Rs + Rp * Rp) / 2;
 }
 
-float DiffuseShliick(float roughness, float ldoth, float ndotl, float ndotv){
-	float Fd = 0.5 + 2 * ldoth * ldoth  * roughness;
-	return (1 + (Fd - 1) * SchlickFresnel(ndotl)) * (1 + (Fd - 1) * SchlickFresnel(ndotv));
+float3 SchlickFresnel(float u, float3 F0){
+    return F0 + (1 - F0) * pow(1 - u, 5);
 }
 
-float SubsurfaceScatter(float roughness, float ldoth, float ndotl, float ndotv){
-	float Fss90 = ldoth * ldoth * roughness;
-	float Fss =  (1 + (Fss90 - 1) * pow(1 - ndotl, 5)) * (1 + (Fss90 - 1) * pow(1 - ndotv, 5));
-	return 1.25 * (Fss * (1.0 / (ndotl + ndotv) - 0.5) + 0.5);
+float GTR2Shadow(float r2, float ndoth){
+    float a2 = r2 * r2;
+    float cosTheta = ndoth * ndoth;
+    float density =  1.0 + (a2 - 1.0) * cosTheta;
+    return a2 * INV_PI / (density * density);
 }
 
-float DisneyDiffuse(float roughness, float ldoth, float ndotl, float ndotv, float subsurface){
-	return lerp(DiffuseShliick(roughness, ldoth, ndotl, ndotv), SubsurfaceScatter(roughness, ldoth, ndotl, ndotv), subsurface);
+float NormalDistributeFunction(float r2, float ndoth){
+    return GTR2Shadow(r2, ndoth);
 }
 
-float GGXShadow(float alpha, float ndoth){
-	float a2 = alpha * alpha;
-	float cosTheta = ndoth * ndoth;
-	float density = (1.0 + (a2 - 1.0) * cosTheta);
-	return (a2 - 1) / (log(a2) * density);
+float ImportanceSampleGGX_PDF(float NDF, float ndoth, float hdotv){
+    return NDF * ndoth * 0.25 / hdotv;
 }
 
-float SmithGGX(float alpha, float ndotv, float ndotl){
-	float smith_v = ndotl * (ndotv * (1 - alpha) + alpha);
-	float smith_l = ndotv * (ndotl * (1 - alpha) + alpha);
-	return 0.5 / (smith_l + smith_v);
+float GeometrySchlickGGX(float u, float roughness){
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+
+    float denom = u * (1.0 - k) + k;
+    return u / denom;
 }
+
+float SmithGGX(float roughness, float ndotv, float ndotl){
+    return GeometrySchlickGGX(ndotv, roughness) * GeometrySchlickGGX(ndotl, roughness);
+}
+
+float DiffuseBRDF(float roughness, float ndotl, float ndotv, float hdotl){
+    float fl = pow(1 - ndotl, 5);
+    float fv = pow(1 - ndotv, 5);
+    float lambert = (1 - 0.5 * fl) * (1 - 0.5 * fv);
+    float RR = 2 * roughness * hdotl;
+    float retroReflect = RR * (fl + fv + fl * fv * (RR - 1));
+    return INV_PI * (lambert + retroReflect);
+}
+
+float3 RefractionBTDF(float GGX, float NDF, float3 F, float hdotv, float hdotl, float ndotv, float ndotl, float etaT, float etaI = 1.0f){
+    float3 term1 = etaT * etaT * (1 - F) * NDF * GGX;
+    float term2 = hdotv * hdotl / (ndotv * ndotl);
+    float term3 = 1e-4 + (etaI * hdotv + etaT * hdotl) * (etaI * hdotv + etaT * hdotl);
+    return term1 * term2 / term3;
+}
+
 #endif
