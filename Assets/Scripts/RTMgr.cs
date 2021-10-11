@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Security.Cryptography.X509Certificates;
+using System.Collections.Generic;
 using UnityEngine;
 using Unity.Mathematics;
 using System.Linq;
@@ -47,7 +49,7 @@ public class RTMgr : MonoBehaviour
     private ComputeBuffer verticesBuffer;
     private ComputeBuffer indicesBuffer;
     private ComputeBuffer meshObjectBuffer;
-    private ComputeBuffer SphereBuffer;
+    private ComputeBuffer sphereBuffer;
     #endregion
 
     #region
@@ -70,16 +72,22 @@ public class RTMgr : MonoBehaviour
     #region ("Sphere Parameters")
     [Header("Sphere Parameters")]
     public float2 SphereRadius = new float2(3.0f, 8.0f);
-    public float SpherePlacementRadius = 100.0f;
+    public float SpherePlacementRadius = 10000.0f;
     #endregion
     public Light directionalLight;
-    #region ("Test Paramters")
     [Range(0.3f, 1)]
     public float relativeIor;
-    #endregion
+    [Range(0, 1)]
+    public float specular;
+    public Color transColor;
+    private BvhMgr bvhMgr;
+    [Range(1, 1500)]
+    public uint sphereCount = 500;
+    public int sphereSeed = 1223832719;
+
     private void Awake() {
         kernelRayTracing = rayTracingCS.FindKernel("RayTracing");
-        SphereBuffer = new ComputeBuffer(55, 72, ComputeBufferType.Append);
+        sphereBuffer = new ComputeBuffer((int)sphereCount, 72, ComputeBufferType.Append);
     }
 
     private void Start() {
@@ -105,19 +113,21 @@ public class RTMgr : MonoBehaviour
     }
 
     private void OnDestroy() {
-        SphereBuffer.Dispose();
+        sphereBuffer.Dispose();
         if (UseOutsideModel){
             verticesBuffer.Dispose();
             indicesBuffer.Dispose();
             meshObjectBuffer.Dispose();
         }
+        bvhMgr.ReleaseBuffer();
     }
 
     void InitParams(){
         rayTracingCS.SetMatrix("CameraToWorld", Camera.main.cameraToWorldMatrix);
         rayTracingCS.SetMatrix("CameraInverseProjection", Camera.main.projectionMatrix.inverse);
         rayTracingCS.SetTexture(kernelRayTracing, "Skybox", skybox);
-        rayTracingCS.SetBuffer(kernelRayTracing, "SphereBuffer", SphereBuffer);
+        rayTracingCS.SetBuffer(kernelRayTracing, "sphereBuffer", sphereBuffer);
+        rayTracingCS.SetBuffer(kernelRayTracing, "bvhBuffer", bvhMgr.bvhBuffer);
         rayTracingCS.SetInt("ReflectTimes", (int)reflectTimes);
         rayTracingCS.SetFloats("Offset", new float[2] {UnityEngine.Random.value, UnityEngine.Random.value});
         rayTracingCS.SetFloat("randSeed", UnityEngine.Random.value);
@@ -176,77 +186,117 @@ public class RTMgr : MonoBehaviour
             return;
         }
 
-        Color color = Color.white;
-        Sphere[] data = new Sphere[55];
-        for (int i = 0; i < 55; i++)
-        {
+        // Color color = Color.white;
+        // Sphere[] data = new Sphere[33];
+        // for (int i = 0; i < 33; i++)
+        // {
+        //     Sphere sphere = new Sphere();
+            // sphere.radius = 10;
+            // float intervalX = 3 * sphere.radius;
+            // float intervalZ = 4 * sphere.radius;
+            // float startX = -4.5f * intervalX;
+            // float startZ = 2 * intervalZ;
+
+            // int row = i / 11;
+            // int col = i % 11;
+            // sphere.pos = new float3(startX + col * intervalX, startZ - row * intervalZ,  0);
+            // sphere.emission = float3.zero;
+            // sphere.relativeIor = relativeIor;
+
+            // switch (row)
+            // {
+            //     case 0://metallic row
+            //         sphere.albedo = new float3(1, 0.71f, 0);
+            //         sphere.metallic = col * 0.1f;
+            //         sphere.transColor = sphere.albedo;
+            //         sphere.roughness = 0.1f;
+            //         sphere.specular = 0.5f;
+            //         sphere.specTrans = 0.0f;
+            //         break;
+            //     case 1:
+            //         //specular row
+            //         sphere.albedo = new float3(1, 0, 0);
+            //         sphere.metallic = 0;
+            //         sphere.transColor = sphere.albedo;
+            //         sphere.roughness = 0.1f;
+            //         sphere.specular = col * 0.1f;
+            //         sphere.specTrans = 0.0f;
+
+            //         break;
+            //     case 2:
+            //         //roughness row
+            //         sphere.albedo = new float3(0, 0.8f, 0.2f);
+            //         sphere.metallic = 0;
+            //         sphere.transColor = sphere.albedo;
+            //         sphere.roughness = col* 0.1f;
+            //         sphere.specular = 0.5f;
+            //         sphere.specTrans = 0.0f;
+            //         break;
+            //     case 3:
+            //         //specTrans row
+            //         sphere.albedo = new float3(0.5f, 0.2f, 1);
+            //         sphere.metallic = 0;
+            //         sphere.transColor = sphere.albedo;
+            //         sphere.roughness = 0.1f;
+            //         sphere.specular = 0.5f;
+            //         sphere.specTrans = col * 0.1f;
+            //         break;
+            //     case 4:
+            //         //roughness with specTrans = 1
+            //         sphere.albedo = new float3(0.03f, 0.03f, 0.03f);
+            //         sphere.metallic = 0;
+            //         sphere.transColor = new float3(1, 1, 1);
+            //         sphere.roughness = col * 0.1f;
+            //         sphere.specular = 0.5f;
+            //         sphere.specTrans = 1f;
+            //         break;
+            // }
+
+        UnityEngine.Random.InitState(sphereSeed);
+        Sphere[] data = new Sphere[sphereCount];
+        for (int i = 0; i < sphereCount; ++i){
             Sphere sphere = new Sphere();
-
-            sphere.radius = 10;
-            float intervalX = 3 * sphere.radius;
-            float intervalZ = 4 * sphere.radius;
-            float startX = -4.5f * intervalX;
-            float startZ = 2 * intervalZ;
-
-            int row = i / 11;
-            int col = i % 11;
-            sphere.pos = new float3(startX + col * intervalX, startZ - row * intervalZ,  0);
-            sphere.emission = float3.zero;
-            sphere.relativeIor = relativeIor;
-
-            switch (row)
+            // Radius and radius
+            sphere.radius = SphereRadius.x + UnityEngine.Random.value * (SphereRadius.y - SphereRadius.x);
+            float2 randomPos = UnityEngine.Random.insideUnitCircle * SpherePlacementRadius;
+            sphere.pos = new float3(randomPos.x, sphere.radius, randomPos.y);
+            // Reject spheres that are intersecting others
+            foreach (Sphere other in data)
             {
-                case 0://metallic row 
-                    sphere.albedo = new float3(1, 0.71f, 0);
-                    sphere.metallic = col * 0.1f;
-                    sphere.transColor = sphere.albedo;
-                    sphere.roughness = 0.1f;
-                    sphere.specular = 0.5f;
-                    sphere.specTrans = 0.0f;
-                    break;
-                case 1:
-                    //specular row
-                    sphere.albedo = new float3(1, 0, 0);
-                    sphere.metallic = 0;
-                    sphere.transColor = sphere.albedo;
-                    sphere.roughness = 0.1f;
-                    sphere.specular = col * 0.1f;
-                    sphere.specTrans = 0.0f;
-
-                    break;
-                case 2:
-                    //roughness row
-                    sphere.albedo = new float3(0, 0.8f, 0.2f);
-                    sphere.metallic = 0;
-                    sphere.transColor = sphere.albedo;
-                    sphere.roughness = col* 0.1f;
-                    sphere.specular = 0.5f;
-                    sphere.specTrans = 0.0f;
-                    break;
-                case 3:
-                    //specTrans row
-                    sphere.albedo = new float3(0.5f, 0.2f, 1);
-                    sphere.metallic = 0;
-                    sphere.transColor = sphere.albedo;
-                    sphere.roughness = 0.1f;
-                    sphere.specular = 0.5f;
-                    sphere.specTrans = col * 0.1f;
-                    break;
-                case 4:
-                    //roughness with specTrans = 1
-                    sphere.albedo = new float3(0.03f, 0.03f, 0.03f);
-                    sphere.metallic = 0;
-                    sphere.transColor = new float3(1, 1, 1);
-                    sphere.roughness = col * 0.1f;
-                    sphere.specular = 0.5f;
-                    sphere.specTrans = 1f;
-                    break;
+                float minDist = sphere.radius + other.radius;
+                if (math.lengthsq(sphere.pos - other.pos) < minDist * minDist)
+                    goto SkipSphere;
             }
+            // Albedo and specular color
+            // BSDF可能还有错？为什么有的时候无法收敛？
+            float chance = UnityEngine.Random.value;
+            Color color = UnityEngine.Random.ColorHSV();
+            sphere.albedo = new float3(color.r, color.g, color.b);
+            sphere.specular = specular;
+            sphere.metallic = math.cos(Mathf.PI * (UnityEngine.Random.value - 0.5f));
+            sphere.roughness = math.sin(Mathf.PI * UnityEngine.Random.value);
+            sphere.relativeIor = relativeIor;
+            sphere.transColor = new float3(transColor.r, transColor.g, transColor.b);
+            sphere.specTrans = Mathf.Abs(math.sin((chance + 1) * Mathf.PI));
+            sphere.emission = float3.zero;
 
             data[i] = sphere;
 
+            SkipSphere:
+                continue;
         }
-        SphereBuffer.SetData(data);
+
+        Array.Sort(data, (x, y) => {
+            if (x.pos.y < y.pos.y)
+                return 1;
+            else if (x.pos.y > y.pos.y)
+                return -1;
+            return 0;
+        });
+
+        sphereBuffer.SetData<Sphere>(new List<Sphere>(data));
+        bvhMgr = new BvhMgr(data);
+        bvhMgr.CreateBoundingBox();
     }
 
     void BuildmeshComputeBuffer(){

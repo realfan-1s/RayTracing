@@ -3,7 +3,10 @@ guid: 1f77783a88e9d8d4d9f2c224e50bcd9a
 MonoImporter:
   externalObjects: {}
   serializedVersion: 2
-  defaultReferences: []
+  defaultReferences:
+  - rayTracingCS: {fileID: 7200000, guid: 7bb7bdcc0e169ed44980650df62d6755, type: 3}
+  - skybox: {instanceID: 0}
+  - directionalLight: {instanceID: 0}
   executionOrder: 0
   icon: {instanceID: 0}
   userData: 

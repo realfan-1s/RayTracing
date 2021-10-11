@@ -41,8 +41,8 @@ struct Sphere{
 struct MeshObject
 {
     float4x4 localToWorldMatrix;
-    int indiceOffset;
-    int indiceCount;
+    uint indiceOffset;
+    uint indiceCount;
     float3 albedo;
     float specular;
     float metallic;
@@ -52,4 +52,16 @@ struct MeshObject
     float3 transColor;
     float3 emission;
 };
+
+struct AABB{
+    float3 TMin;
+    float3 TMax;
+};
+
+struct BvhNode{
+    AABB boundingBox;
+    uint containSphereCount;
+    uint spherePos;
+};
+
 #endif

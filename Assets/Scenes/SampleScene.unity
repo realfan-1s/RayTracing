@@ -210,13 +210,13 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 705507993}
-  m_LocalRotation: {x: 0.29883623, y: -0.64085644, z: 0.29883623, w: 0.64085644}
+  m_LocalRotation: {x: 0.40821788, y: -0.23456968, z: 0.10938163, w: 0.8754261}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 0
-  m_LocalEulerAnglesHint: {x: 50, y: -90, z: 0}
+  m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
 --- !u!1 &963194225
 GameObject:
   m_ObjectHideFlags: 0
@@ -323,7 +323,11 @@ MonoBehaviour:
     y: 8
   SpherePlacementRadius: 50
   directionalLight: {fileID: 705507994}
-  relativeIor: 0.64526
+  relativeIor: 0.65
+  specular: 0.58
+  transColor: {r: 0.3566036, g: 0.33459416, b: 0.6886792, a: 0}
+  sphereCount: 1500
+  sphereSeed: 1223832719
 --- !u!1 &1612697707
 GameObject:
   m_ObjectHideFlags: 0
@@ -349,7 +353,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1612697707}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 57, y: 10, z: -206}
+  m_LocalPosition: {x: 57, y: 50, z: -206}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children:
   - {fileID: 963194228}
