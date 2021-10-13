@@ -17,6 +17,7 @@ public struct BvhNode{
     public AABB boundingBox;
     public uint containSphereCount;
     public uint spherePos;
+    public uint missIndex;
 }
 
 public class BvhMgr
@@ -43,8 +44,9 @@ public class BvhMgr
         root.boundingBox = new AABB(minPos, maxPos);
         root.containSphereCount = sphereCount;
         root.spherePos = 0;
+        root.missIndex = 0;
         DFS(spheres, 0, root, 1);
-        bvhBuffer = new ComputeBuffer(bvhTrees.Length, 32, ComputeBufferType.Append);
+        bvhBuffer = new ComputeBuffer(bvhTrees.Length, 36, ComputeBufferType.Append);
         bvhBuffer.SetData<BvhNode>(new List<BvhNode>(bvhTrees));
     }
     public void ReleaseBuffer(){
@@ -73,9 +75,11 @@ public class BvhMgr
         leftNode.boundingBox = new AABB(leftMinPos, leftMaxPos);
         leftNode.containSphereCount = leftLen;
         leftNode.spherePos = startPos;
+        leftNode.missIndex = 2 * (uint)treePos + 1;
         rightNode.boundingBox = new AABB(rightMinPos, rightMaxPos);
         rightNode.containSphereCount = node.containSphereCount - leftLen;
         rightNode.spherePos = leftEnd;
+        rightNode.missIndex = 0;
 
         bvhTrees[treePos] = node;
         DFS(spheres, startPos, leftNode, 2 * treePos);

@@ -326,7 +326,7 @@ MonoBehaviour:
   relativeIor: 0.65
   specular: 0.58
   transColor: {r: 0.3566036, g: 0.33459416, b: 0.6886792, a: 0}
-  sphereCount: 1500
+  sphereCount: 1024
   sphereSeed: 1223832719
 --- !u!1 &1612697707
 GameObject:

@@ -124,11 +124,11 @@
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEngine.TestRunner\TestRunner\ITestRunnerListener.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEngine.TestRunner\TestRunner\TestEnumeratorWrapper.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEngine.TestRunner\Utils\ColorEqualityComparer.cs" />
+     <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEngine.TestRunner\Utils\IPostBuildCleanup.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEngine.TestRunner\Assertions\ConstraintsExtensions.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEngine.TestRunner\NUnitExtensions\Attributes\UnityTestAttribute.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEngine.TestRunner\Utils\AssemblyProvider\ScriptingRuntimeProxy.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEngine.TestRunner\TestRunner\Callbacks\TestResultRendererCallback.cs" />
-     <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEngine.TestRunner\Utils\IPostBuildCleanup.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEngine.TestRunner\TestRunner\RemoteHelpers\PlayerConnectionMessageIds.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEngine.TestRunner\Utils\Vector2EqualityComparer.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEngine.TestRunner\Utils\Utils.cs" />

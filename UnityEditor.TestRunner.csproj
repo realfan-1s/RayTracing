@@ -90,6 +90,7 @@
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\Api\ITestResultAdaptor.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\TestRunner\EditModePCHelper.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\TestRunner\Callbacks\WindowResultUpdater.cs" />
+     <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\Api\ExecutionSettings.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\TestRunner\Callbacks\EditModeRunnerCallback.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\RequireApiProfileAttribute.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\CommandLineTest\Executer.cs" />
@@ -98,7 +99,6 @@
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\TestRun\Tasks\TestTaskBase.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\Api\TestResultAdaptor.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\Api\ICallbacksDelegator.cs" />
-     <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\Api\ExecutionSettings.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\GUI\TestListTreeView\Icons.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\TestLaunchers\PlaymodeLauncher.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\UnityTestProtocol\UnityTestProtocolListener.cs" />
@@ -142,8 +142,8 @@
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\TestLaunchers\PrebuildSetupAttributeFinder.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\NUnitExtension\Attributes\ITestPlayerBuildModifier.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\Api\CallbacksDelegator.cs" />
-     <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\TestRun\Tasks\SaveModiedSceneTask.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\AssemblyInfo.cs" />
+     <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\TestRun\Tasks\SaveModiedSceneTask.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\TestRun\Tasks\PerformUndoTask.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\TestRun\TestRunCanceledException.cs" />
      <Compile Include="Library\PackageCache\com.unity.test-framework@1.1.27\UnityEditor.TestRunner\GUI\IGuiHelper.cs" />

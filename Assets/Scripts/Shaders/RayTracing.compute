@@ -29,8 +29,8 @@ void IntersectGroundPlane(Ray ray, inout RayHit hit);
 void IntersectSphere(Ray ray, inout RayHit hit, uint i);
 bool IntersectTriangle(Ray ray, float3 vert0, float3 vert1, float3 vert2, inout float t, inout float u, inout float v);
 void IntersectObject(Ray ray, inout RayHit hit, MeshObject object);
-float IntersectAABB(Ray ray, AABB box);
-void TraverseBVH(Ray ray, inout RayHit hit, uint volumePos = 1);
+bool IntersectAABB(Ray ray, AABB box);
+void TraverseBVH(Ray ray, inout RayHit hit);
 float3 Shading(inout Ray ray, RayHit hit, uint2 idxy);
 float3 HemiSpehereSampling(uint2 idxy, float3 normal, float alpha = 1.0);
 float3 GGXSampling(uint2 idxy, float3 normal, float r2);
@@ -39,7 +39,8 @@ Ray GenerateRay(float3 position, float3 direction);
 RayHit GenerateRayHit();
 float Rand(uint2 seed);
 
-[numthreads(8, 8, 1)]
+[numthreads(16
+, 16, 1)]
 void RayTracing (uint3 id : SV_DispatchThreadID)
 {
     uint width, height;
@@ -108,11 +109,12 @@ RayHit PathTrace(Ray ray){
     for (i = 0; i < meshCount; ++i)
         IntersectObject(ray, hit, meshObjectBuffer[i]);
 #else
+    bvhBuffer.GetDimensions(meshCount, strides);
     // sphereBuffer.GetDimensions(meshCount, strides);
     // for (i = 0; i < meshCount; ++i){
     //     IntersectSphere(ray, hit, i);
     // }
-    TraverseBVH(ray, hit, 1);
+    TraverseBVH(ray, hit);
 #endif
     return hit;
 }
@@ -178,7 +180,7 @@ bool IntersectTriangle(Ray ray, float3 vert0, float3 vert1, float3 vert2, inout 
     return true;
 }
 
-float IntersectAABB(Ray ray, AABB box){
+bool IntersectAABB(Ray ray, AABB box){
     float3 invDir = 1.0 / ray.dir;
     float3 inAABB = (box.TMin - ray.pos) * invDir;
     float3 outAAABB = (box.TMax - ray.pos) * invDir;
@@ -187,7 +189,7 @@ float IntersectAABB(Ray ray, AABB box){
     float Tin = max(TMin.x, max(TMin.y, TMin.z));
     float Tout = min(TMax.x, min(TMax.y, TMax.z));
     // 可能相交、不相交、光线在AABB盒内部三种可能
-    return Tout > Tin ? (Tin > 0.0 ? Tin : Tout) : 1.#INF;
+    return Tout > Tin ? true: false;
 }
 
 void IntersectObject(Ray ray, inout RayHit hit, MeshObject object){
@@ -218,23 +220,30 @@ void IntersectObject(Ray ray, inout RayHit hit, MeshObject object){
     }
 }
 
-void TraverseBVH(Ray ray, inout RayHit hit, uint volumePos){
-    //TODO: corner case!
-    while (bvhBuffer[volumePos].containSphereCount > 27){
-        BvhNode node = bvhBuffer[volumePos];
-        float t = IntersectAABB(ray, node.boundingBox);
-        if (t == 1.#INF)  return;
-        BvhNode leftNode = bvhBuffer[2 * volumePos];
-        BvhNode rightNode = bvhBuffer[2 * volumePos + 1];
-        float Tleft = IntersectAABB(ray, leftNode.boundingBox);
-        float Tright = IntersectAABB(ray, rightNode.boundingBox);
-        volumePos = (Tleft < Tright ? volumePos * 2 : volumePos * 2 + 1);
-    }
+void TraverseBVH(Ray ray, inout RayHit hit){
+    uint stack[32];
+    uint pivot = 0;
+    stack[pivot++] = 1;
 
-    float startPos = bvhBuffer[volumePos].spherePos;
-    float endPos = startPos + bvhBuffer[volumePos].containSphereCount;
-    for (int i = startPos; i < endPos; ++i)
-        IntersectSphere(ray, hit, i);
+    while (pivot){
+        pivot--;
+        uint nodeIndex = stack[pivot];
+        BvhNode node = bvhBuffer[nodeIndex];
+        if (IntersectAABB(ray, node.boundingBox)){
+            // leaf Node
+            if (node.containSphereCount < 27) {
+                uint startPos = node.spherePos;
+                uint sphereLen = startPos + node.containSphereCount;
+                for (uint i = startPos; i < sphereLen; ++i){
+                    IntersectSphere(ray, hit, i);
+                }
+            } else { // branch Node
+                if (pivot + 1 >= 32) return;
+                stack[pivot++] = nodeIndex * 2;
+                stack[pivot++] = nodeIndex * 2 + 1;
+            }
+        }
+    }
 }
 
 float3 Shading(inout Ray ray, RayHit hit, uint2 idxy){
