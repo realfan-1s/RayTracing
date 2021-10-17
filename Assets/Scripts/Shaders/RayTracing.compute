@@ -15,6 +15,7 @@ StructuredBuffer<float3> verticesBuffer;
 StructuredBuffer<int> indicesBuffer;
 StructuredBuffer<Sphere> sphereBuffer;
 StructuredBuffer<BvhNode> bvhBuffer;
+StructuredBuffer<Triangle> triangleBuffer;
 float2 Offset;
 float4x4 CameraToWorld;
 float4x4 CameraInverseProjection;
@@ -39,8 +40,7 @@ Ray GenerateRay(float3 position, float3 direction);
 RayHit GenerateRayHit();
 float Rand(uint2 seed);
 
-[numthreads(16
-, 16, 1)]
+[numthreads(16, 16, 1)]
 void RayTracing (uint3 id : SV_DispatchThreadID)
 {
     uint width, height;
@@ -102,7 +102,7 @@ Ray PrimaryRayFromCam(float2 uv){
 
 RayHit PathTrace(Ray ray){
     RayHit hit = GenerateRayHit();
-    // IntersectGroundPlane(ray, hit);
+    IntersectGroundPlane(ray, hit);
     uint meshCount, strides, i;
 #if _USE_OUTSIDE_MODEL
     meshObjectBuffer.GetDimensions(meshCount, strides);
@@ -188,7 +188,6 @@ bool IntersectAABB(Ray ray, AABB box){
     float3 TMax = max(inAABB, outAAABB);
     float Tin = max(TMin.x, max(TMin.y, TMin.z));
     float Tout = min(TMax.x, min(TMax.y, TMax.z));
-    // 可能相交、不相交、光线在AABB盒内部三种可能
     return Tout > Tin ? true: false;
 }
 
@@ -239,7 +238,7 @@ void TraverseBVH(Ray ray, inout RayHit hit){
                 }
             } else { // branch Node
                 if (pivot + 1 >= 32) return;
-                stack[pivot++] = nodeIndex * 2;
+                stack[pivot++] = 2 * nodeIndex;
                 stack[pivot++] = nodeIndex * 2 + 1;
             }
         }

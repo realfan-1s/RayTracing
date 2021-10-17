@@ -40,6 +40,8 @@
      <Compile Include="Assets\Scripts\BvhMgr.cs" />
      <Compile Include="Assets\Scripts\RTMgr.cs" />
      <Compile Include="Assets\Scripts\RayTracingObj.cs" />
+     <Compile Include="Assets\Scripts\Compare.cs" />
+     <Compile Include="Assets\Scripts\DataStruct.cs" />
      <None Include="Assets\Scripts\Shaders\Shading.compute" />
      <None Include="Assets\Scripts\Shaders\AntiAliasing.shader" />
      <None Include="Assets\Scripts\Shaders\Struct.compute" />

@@ -53,6 +53,13 @@ struct MeshObject
     float3 emission;
 };
 
+struct Triangle{
+    float3 vert1;
+    float3 vert2;
+    float3 vert3;
+    float3 normal;
+};
+
 struct AABB{
     float3 TMin;
     float3 TMax;
@@ -62,7 +69,6 @@ struct BvhNode{
     AABB boundingBox;
     uint containSphereCount;
     uint spherePos;
-    uint missIndex;
 };
 
 #endif

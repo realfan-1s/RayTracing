@@ -1,39 +1,7 @@
-﻿using System;
-using System.Security.Cryptography.X509Certificates;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using Unity.Mathematics;
 using System.Linq;
-
-public struct Sphere
-{
-    public float3 pos;
-    public float radius;
-    public float3 albedo;
-    public float specular;
-    public float metallic;
-    public float roughness;
-    public float specTrans;
-    public float relativeIor;
-    public float3 transColor;
-    public float3 emission;
-}
-
-public struct MeshObject
-{
-    public float4x4 localToWorldMatrix;
-    public int indiceOffset;
-    public int indiceCount;
-    public float3 albedo;
-    public float specular;
-    public float metallic;
-    public float roughness;
-    public float specTrans;
-    public float relativeIor;
-    public float3 transColor;
-    public float3 emission;
-
-}
 
 public class RTMgr : MonoBehaviour
 {
@@ -50,6 +18,7 @@ public class RTMgr : MonoBehaviour
     private ComputeBuffer indicesBuffer;
     private ComputeBuffer meshObjectBuffer;
     private ComputeBuffer sphereBuffer;
+    private ComputeBuffer triangleBuffer;
     #endregion
 
     #region
@@ -66,13 +35,14 @@ public class RTMgr : MonoBehaviour
     private static List<MeshObject> meshList = new List<MeshObject>();
     private static List<Vector3> verticesList = new List<Vector3>();
     private static List<int> indicesList = new List<int>();
+    private static List<Triangle> triangleList = new List<Triangle>();
     private static bool needRebuildComputeBuffer = false;
     #endregion
 
     #region ("Sphere Parameters")
     [Header("Sphere Parameters")]
     public float2 SphereRadius = new float2(3.0f, 8.0f);
-    public float SpherePlacementRadius = 10000.0f;
+    public float SpherePlacementRadius = 1000.0f;
     #endregion
     public Light directionalLight;
     [Range(0.3f, 1)]
@@ -118,16 +88,40 @@ public class RTMgr : MonoBehaviour
             verticesBuffer.Dispose();
             indicesBuffer.Dispose();
             meshObjectBuffer.Dispose();
+        } else {
+            bvhMgr.ReleaseBuffer();
         }
-        bvhMgr.ReleaseBuffer();
     }
 
+    // private void OnDrawGizmos() {
+    //     if (bvhMgr == null)
+    //         return;
+
+    //     Gizmos.color = Color.red;
+    //     AABB box1 = bvhMgr.bvhTrees[2].boundingBox;
+    //     float3 center = (box1.TMax + box1.TMin) / 2;
+    //     float3 size = box1.TMax - box1.TMin;
+    //     Gizmos.DrawWireCube(center, size);
+
+    //     Gizmos.color = Color.blue;
+    //     AABB box2 = bvhMgr.bvhTrees[4].boundingBox;
+    //     float3 center2 = (box2.TMax + box2.TMin) / 2;
+    //     float3 size2 = box2.TMax - box2.TMin;
+    //     Gizmos.DrawWireCube(center2, size2);
+
+    //     Gizmos.color = Color.yellow;
+    //     AABB box3 = bvhMgr.bvhTrees[5].boundingBox;
+    //     float3 center3 = (box3.TMax + box3.TMin) / 2;
+    //     float3 size3 = box3.TMax - box3.TMin;
+    //     Gizmos.DrawWireCube(center3, size3);
+    // }
     void InitParams(){
         rayTracingCS.SetMatrix("CameraToWorld", Camera.main.cameraToWorldMatrix);
         rayTracingCS.SetMatrix("CameraInverseProjection", Camera.main.projectionMatrix.inverse);
         rayTracingCS.SetTexture(kernelRayTracing, "Skybox", skybox);
         rayTracingCS.SetBuffer(kernelRayTracing, "sphereBuffer", sphereBuffer);
-        rayTracingCS.SetBuffer(kernelRayTracing, "bvhBuffer", bvhMgr.bvhBuffer);
+        if (!UseOutsideModel)
+            rayTracingCS.SetBuffer(kernelRayTracing, "bvhBuffer", bvhMgr.bvhBuffer);
         rayTracingCS.SetInt("ReflectTimes", (int)reflectTimes);
         rayTracingCS.SetFloats("Offset", new float[2] {UnityEngine.Random.value, UnityEngine.Random.value});
         rayTracingCS.SetFloat("randSeed", UnityEngine.Random.value);
@@ -186,89 +180,85 @@ public class RTMgr : MonoBehaviour
             return;
         }
 
-        // Color color = Color.white;
-        // Sphere[] data = new Sphere[33];
-        // for (int i = 0; i < 33; i++)
+        // Sphere[] data = new Sphere[55];
+        // for (int i = 0; i < 55; i++)
         // {
         //     Sphere sphere = new Sphere();
-            // sphere.radius = 10;
-            // float intervalX = 3 * sphere.radius;
-            // float intervalZ = 4 * sphere.radius;
-            // float startX = -4.5f * intervalX;
-            // float startZ = 2 * intervalZ;
+        //     sphere.radius = 10;
+        //     float intervalX = 3 * sphere.radius;
+        //     float intervalZ = 4 * sphere.radius;
+        //     float startX = -4.5f * intervalX;
+        //     float startZ = 2 * intervalZ;
 
-            // int row = i / 11;
-            // int col = i % 11;
-            // sphere.pos = new float3(startX + col * intervalX, startZ - row * intervalZ,  0);
-            // sphere.emission = float3.zero;
-            // sphere.relativeIor = relativeIor;
+        //     int row = i / 11;
+        //     int col = i % 11;
+        //     sphere.pos = new float3(startX + col * intervalX, startZ - row * intervalZ,  0);
+        //     sphere.emission = float3.zero;
+        //     sphere.relativeIor = relativeIor;
 
-            // switch (row)
-            // {
-            //     case 0://metallic row
-            //         sphere.albedo = new float3(1, 0.71f, 0);
-            //         sphere.metallic = col * 0.1f;
-            //         sphere.transColor = sphere.albedo;
-            //         sphere.roughness = 0.1f;
-            //         sphere.specular = 0.5f;
-            //         sphere.specTrans = 0.0f;
-            //         break;
-            //     case 1:
-            //         //specular row
-            //         sphere.albedo = new float3(1, 0, 0);
-            //         sphere.metallic = 0;
-            //         sphere.transColor = sphere.albedo;
-            //         sphere.roughness = 0.1f;
-            //         sphere.specular = col * 0.1f;
-            //         sphere.specTrans = 0.0f;
+        //     switch (row)
+        //     {
+        //         case 0: // metallic row
+        //             sphere.albedo = new float3(1, 0.71f, 0);
+        //             sphere.metallic = col * 0.1f;
+        //             sphere.transColor = sphere.albedo;
+        //             sphere.roughness = 0.1f;
+        //             sphere.specular = 0.5f;
+        //             sphere.specTrans = 0.0f;
+        //             break;
+        //         case 1: // specular row
+        //             sphere.albedo = new float3(1, 0, 0);
+        //             sphere.metallic = 0;
+        //             sphere.transColor = sphere.albedo;
+        //             sphere.roughness = 0.1f;
+        //             sphere.specular = col * 0.1f;
+        //             sphere.specTrans = 0.0f;
 
-            //         break;
-            //     case 2:
-            //         //roughness row
-            //         sphere.albedo = new float3(0, 0.8f, 0.2f);
-            //         sphere.metallic = 0;
-            //         sphere.transColor = sphere.albedo;
-            //         sphere.roughness = col* 0.1f;
-            //         sphere.specular = 0.5f;
-            //         sphere.specTrans = 0.0f;
-            //         break;
-            //     case 3:
-            //         //specTrans row
-            //         sphere.albedo = new float3(0.5f, 0.2f, 1);
-            //         sphere.metallic = 0;
-            //         sphere.transColor = sphere.albedo;
-            //         sphere.roughness = 0.1f;
-            //         sphere.specular = 0.5f;
-            //         sphere.specTrans = col * 0.1f;
-            //         break;
-            //     case 4:
-            //         //roughness with specTrans = 1
-            //         sphere.albedo = new float3(0.03f, 0.03f, 0.03f);
-            //         sphere.metallic = 0;
-            //         sphere.transColor = new float3(1, 1, 1);
-            //         sphere.roughness = col * 0.1f;
-            //         sphere.specular = 0.5f;
-            //         sphere.specTrans = 1f;
-            //         break;
-            // }
+        //             break;
+        //         case 2: // roughness row
+        //             sphere.albedo = new float3(0, 0.8f, 0.2f);
+        //             sphere.metallic = 0;
+        //             sphere.transColor = sphere.albedo;
+        //             sphere.roughness = col* 0.1f;
+        //             sphere.specular = 0.5f;
+        //             sphere.specTrans = 0.0f;
+        //             break;
+        //         case 3: // specTrans row
+        //             sphere.albedo = new float3(0.5f, 0.2f, 1);
+        //             sphere.metallic = 0;
+        //             sphere.transColor = sphere.albedo;
+        //             sphere.roughness = 0.1f;
+        //             sphere.specular = 0.5f;
+        //             sphere.specTrans = col * 0.1f;
+        //             break;
+        //         case 4: // roughness with specTrans = 1
+        //             sphere.albedo = new float3(0.03f, 0.03f, 0.03f);
+        //             sphere.metallic = 0;
+        //             sphere.transColor = new float3(1, 1, 1);
+        //             sphere.roughness = col * 0.1f;
+        //             sphere.specular = 0.5f;
+        //             sphere.specTrans = 1f;
+        //             break;
+        //     }
+
+        //     data[i] = sphere;
+        // }
 
         UnityEngine.Random.InitState(sphereSeed);
         Sphere[] data = new Sphere[sphereCount];
         for (int i = 0; i < sphereCount; ++i){
             Sphere sphere = new Sphere();
-            // Radius and radius
+        SkipSphere:
             sphere.radius = SphereRadius.x + UnityEngine.Random.value * (SphereRadius.y - SphereRadius.x);
             float2 randomPos = UnityEngine.Random.insideUnitCircle * SpherePlacementRadius;
             sphere.pos = new float3(randomPos.x, sphere.radius, randomPos.y);
-            // Reject spheres that are intersecting others
             foreach (Sphere other in data)
             {
                 float minDist = sphere.radius + other.radius;
-                if (math.lengthsq(sphere.pos - other.pos) < minDist * minDist)
+                if (math.lengthsq(sphere.pos - other.pos) < minDist * minDist){
                     goto SkipSphere;
+                }
             }
-            // Albedo and specular color
-            // BSDF可能还有错？为什么有的时候无法收敛？
             float chance = UnityEngine.Random.value;
             Color color = UnityEngine.Random.ColorHSV();
             sphere.albedo = new float3(color.r, color.g, color.b);
@@ -281,22 +271,11 @@ public class RTMgr : MonoBehaviour
             sphere.emission = float3.zero;
 
             data[i] = sphere;
-
-            SkipSphere:
-                continue;
         }
 
-        Array.Sort(data, (x, y) => {
-            if (x.pos.y < y.pos.y)
-                return 1;
-            else if (x.pos.y > y.pos.y)
-                return -1;
-            return 0;
-        });
-
-        sphereBuffer.SetData<Sphere>(new List<Sphere>(data));
         bvhMgr = new BvhMgr(data);
         bvhMgr.CreateBoundingBox();
+        sphereBuffer.SetData<Sphere>(new List<Sphere>(data));
     }
 
     void BuildmeshComputeBuffer(){
@@ -308,6 +287,7 @@ public class RTMgr : MonoBehaviour
         meshList.Clear();
         verticesList.Clear();
         indicesList.Clear();
+        triangleList.Clear();
 
         int nums = rayTracingList.Count;
         for (int i = 0; i < nums; ++i){
@@ -337,6 +317,7 @@ public class RTMgr : MonoBehaviour
         GenerateComputeBuffer(ref meshObjectBuffer, meshList, 128);
         GenerateComputeBuffer(ref verticesBuffer, verticesList, 12);
         GenerateComputeBuffer(ref indicesBuffer, indicesList, 4);
+        GenerateComputeBuffer(ref triangleBuffer, triangleList, 48);
 
         rayTracingCS.SetBuffer(kernelRayTracing, "meshObjectBuffer", meshObjectBuffer);
         rayTracingCS.SetBuffer(kernelRayTracing, "verticesBuffer", verticesBuffer);
@@ -365,7 +346,10 @@ public class RTMgr : MonoBehaviour
             {
                 buffer = new ComputeBuffer(data.Count, stride);
             }
-            buffer.SetData(data);
+            buffer.SetData<T>(data);
         }
+    }
+    private List<Triangle> TransformTriangles(GameObject mesh){
+        return null;
     }
 }
