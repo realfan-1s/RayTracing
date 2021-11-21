@@ -7,7 +7,7 @@ MonoImporter:
   - rayTracingCS: {fileID: 7200000, guid: 7bb7bdcc0e169ed44980650df62d6755, type: 3}
   - skybox: {instanceID: 0}
   - directionalLight: {instanceID: 0}
-  executionOrder: 0
+  executionOrder: -1
   icon: {instanceID: 0}
   userData: 
   assetBundleName: 

@@ -1,0 +1,41 @@
+#ifndef _SAMPLING
+#define _SAMPLING
+
+#include "RayTracing.compute"
+
+float3x3 ToTangentSpace(float3 normal){
+    float3 assist = float3(1.0, 0.0, 0.0);
+    if (abs(normal.x) > 0.99)
+        assist = float3(0.0, 0.0, 1.0);
+
+    float3 tangent = normalize(cross(normal, assist));
+    float3 binormal = normalize(cross(normal, tangent));
+    return float3x3(tangent, binormal, normal);
+}
+
+float Rand(uint2 seed){
+    float result = frac(sin(randSeed / 100.0 * dot(seed, float2(12.9898, 78.233))) * 43758.5453);
+    randSeed += 1.0;
+    return result;
+}
+
+// 单位半球面均匀分布采样点生成和半球上做重要性采样参考http://corysimon.github.io/articles/uniformdistn-on-sphere/
+float3 HemiSpehereSampling(uint2 idxy, float3 normal, float alpha){
+    float cosTheta = pow(Rand(idxy), 1.0 / (alpha + 1.0));
+    float sinTheta = sqrt(saturate(1.0 - cosTheta * cosTheta));
+    float phi = 2 * PI * Rand(idxy);
+    float3 samplingDir = float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+    return mul(samplingDir, ToTangentSpace(normal));
+}
+
+float3 GGXSampling(uint2 idxy, float3 normal, float r2){
+    float random1 = Rand(idxy);
+    float random2 = Rand(idxy);
+    float cosTheta = sqrt((1.0 - random1) / (1.0 + (r2 * r2 - 1.0) * random1));
+    float sinTheta = sqrt(saturate(1.0 - cosTheta * cosTheta));
+    float phi = 2 * PI * random2;
+    float3 samplingDir = float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+    return mul(samplingDir, ToTangentSpace(normal));
+}
+
+#endif

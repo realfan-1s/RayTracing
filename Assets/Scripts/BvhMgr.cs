@@ -79,7 +79,6 @@ public class BvhMgr
         SortType bestSort = SortType.xSort;
         for (int axis = 0; axis < 3; ++axis){
             SortType bestSort_Temp = SortType.xSort;
-            // TODO: 可能出现cost更大但已经排序了的可能
             List<Sphere> temp = new List<Sphere>();
             switch (axis){
                 case 0:

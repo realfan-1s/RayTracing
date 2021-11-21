@@ -25,8 +25,14 @@ public class RTMgr : MonoBehaviour
     [Header("Ray Tracing Parameters")]
     [SerializeField]
     private Texture skybox;
-    private Material antiAliasing = null;
-    private uint currentSample = 0;
+    private Material _antiAliasing;
+    private Material antiAliasing {
+        get {
+            if (_antiAliasing == null)
+                _antiAliasing = new Material(Shader.Find("Custom/AntiAliasing"));
+            return _antiAliasing;
+        }
+    }
     [Range(1, 10)]
     public uint reflectTimes = 8;
     public bool whiteStyleRayTracing = true;
@@ -47,20 +53,18 @@ public class RTMgr : MonoBehaviour
     public Light directionalLight;
     [Range(0.3f, 1)]
     public float relativeIor;
-    [Range(0, 1)]
-    public float specular;
     public Color transColor;
     private BvhMgr bvhMgr;
     [Range(1, 1500)]
     public uint sphereCount = 500;
     public int sphereSeed = 1223832719;
-
     private void Awake() {
         kernelRayTracing = rayTracingCS.FindKernel("RayTracing");
         sphereBuffer = new ComputeBuffer((int)sphereCount, 72, ComputeBufferType.Append);
     }
 
     private void Start() {
+        InitRenderTexture();
         SetSphere();
     }
     /// <summary>
@@ -77,7 +81,6 @@ public class RTMgr : MonoBehaviour
 
     private void Update() {
         if (transform.hasChanged){
-            currentSample = 0;
             transform.hasChanged = false;
         }
     }
@@ -93,31 +96,10 @@ public class RTMgr : MonoBehaviour
         }
     }
 
-    // private void OnDrawGizmos() {
-    //     if (bvhMgr == null)
-    //         return;
-
-    //     Gizmos.color = Color.red;
-    //     AABB box1 = bvhMgr.bvhTrees[2].boundingBox;
-    //     float3 center = (box1.TMax + box1.TMin) / 2;
-    //     float3 size = box1.TMax - box1.TMin;
-    //     Gizmos.DrawWireCube(center, size);
-
-    //     Gizmos.color = Color.blue;
-    //     AABB box2 = bvhMgr.bvhTrees[4].boundingBox;
-    //     float3 center2 = (box2.TMax + box2.TMin) / 2;
-    //     float3 size2 = box2.TMax - box2.TMin;
-    //     Gizmos.DrawWireCube(center2, size2);
-
-    //     Gizmos.color = Color.yellow;
-    //     AABB box3 = bvhMgr.bvhTrees[5].boundingBox;
-    //     float3 center3 = (box3.TMax + box3.TMin) / 2;
-    //     float3 size3 = box3.TMax - box3.TMin;
-    //     Gizmos.DrawWireCube(center3, size3);
-    // }
     void InitParams(){
         rayTracingCS.SetMatrix("CameraToWorld", Camera.main.cameraToWorldMatrix);
         rayTracingCS.SetMatrix("CameraInverseProjection", Camera.main.projectionMatrix.inverse);
+        rayTracingCS.SetFloats("CameraNearAndFar", new float[2] {Camera.main.nearClipPlane, Camera.main.farClipPlane});
         rayTracingCS.SetTexture(kernelRayTracing, "Skybox", skybox);
         rayTracingCS.SetBuffer(kernelRayTracing, "sphereBuffer", sphereBuffer);
         if (!UseOutsideModel)
@@ -138,6 +120,10 @@ public class RTMgr : MonoBehaviour
         else
             rayTracingCS.DisableKeyword("_USE_OUTSIDE_MODEL");
 #endif
+    }
+    private void OnPreCull() {
+        Vector2 _jitter = TemporalAA.OnPreCull();
+        antiAliasing.SetVector("_Jitter", _jitter);
     }
     void InitRenderTexture(){
         if (targetRT == null || targetRT.width != Screen.width || targetRT.height != Screen.height){
@@ -163,17 +149,27 @@ public class RTMgr : MonoBehaviour
         groupY = Mathf.CeilToInt(Screen.height / threadY);
     }
     void Render(RenderTexture dest){
-        InitRenderTexture();
-        rayTracingCS.SetTexture(kernelRayTracing, "Result", targetRT);
+        rayTracingCS.SetTexture(kernelRayTracing, "Result", targetRT); // targetRT中rgb表示多次弹射后的颜色，a表示camera的深度缓存
         int groupX, groupY;
         SetKernelGroup(out groupX, out groupY);
         rayTracingCS.Dispatch(kernelRayTracing, groupX, groupY, 1);
-        if (antiAliasing == null)
-            antiAliasing = new Material(Shader.Find("Custom/AntiAliasing"));
-        antiAliasing.SetFloat("_Sample", currentSample);
-        Graphics.Blit(targetRT, convergeRT, antiAliasing);
+
+        antiAliasing.SetMatrix("_NonJitterVP", TemporalAA._nonJitterProjection);
+        antiAliasing.SetMatrix("_previousVP", TemporalAA._prevProjection);
+        Graphics.Blit(targetRT, TemporalAA.velocityBuffer, antiAliasing, 0);
+        antiAliasing.SetTexture("_CameraMotionVectorsTex", TemporalAA.velocityBuffer);
+
+        antiAliasing.SetFloat("_Stationary", TemporalAA.taaSetting.blend.stationary);
+        antiAliasing.SetFloat("_Move", TemporalAA.taaSetting.blend.move);
+        antiAliasing.SetFloat("_SharpAmount", TemporalAA.taaSetting.jitter.sharpenAmount);
+        antiAliasing.SetFloat("_MotionAmplification", TemporalAA.taaSetting.blend.motionAmplification);
+        antiAliasing.SetTexture("_HistoryTex", TemporalAA.historyBuffer);
+        Graphics.Blit(targetRT, convergeRT, antiAliasing, 1);
+        Graphics.Blit(convergeRT, TemporalAA.historyBuffer);
         Graphics.Blit(convergeRT, dest);
-        currentSample++;
+    }
+    private void OnPostRender() {
+        TemporalAA.PostRender();
     }
     void SetSphere(){
         if (UseOutsideModel){
@@ -248,27 +244,35 @@ public class RTMgr : MonoBehaviour
         Sphere[] data = new Sphere[sphereCount];
         for (int i = 0; i < sphereCount; ++i){
             Sphere sphere = new Sphere();
+            int plus = 0;
         SkipSphere:
             sphere.radius = SphereRadius.x + UnityEngine.Random.value * (SphereRadius.y - SphereRadius.x);
             float2 randomPos = UnityEngine.Random.insideUnitCircle * SpherePlacementRadius;
-            sphere.pos = new float3(randomPos.x, sphere.radius, randomPos.y);
+            sphere.pos = new float3(randomPos.x, sphere.radius + plus, randomPos.y);
             foreach (Sphere other in data)
             {
                 float minDist = sphere.radius + other.radius;
                 if (math.lengthsq(sphere.pos - other.pos) < minDist * minDist){
+                    plus += 2;
                     goto SkipSphere;
                 }
             }
             float chance = UnityEngine.Random.value;
-            Color color = UnityEngine.Random.ColorHSV();
-            sphere.albedo = new float3(color.r, color.g, color.b);
-            sphere.specular = specular;
-            sphere.metallic = math.cos(Mathf.PI * (UnityEngine.Random.value - 0.5f));
-            sphere.roughness = math.sin(Mathf.PI * UnityEngine.Random.value);
-            sphere.relativeIor = relativeIor;
-            sphere.transColor = new float3(transColor.r, transColor.g, transColor.b);
-            sphere.specTrans = Mathf.Abs(math.sin((chance + 1) * Mathf.PI));
-            sphere.emission = float3.zero;
+            // if (chance < 0.8f) {
+                Color color = UnityEngine.Random.ColorHSV();
+                sphere.albedo = new float3(color.r, color.g, color.b);
+                sphere.specular = chance;
+                sphere.metallic = math.cos(Mathf.PI * (UnityEngine.Random.value - 0.5f));
+                sphere.roughness = math.sin(Mathf.PI * UnityEngine.Random.value);
+                sphere.relativeIor = relativeIor;
+                sphere.transColor = new float3(transColor.r, transColor.g, transColor.a);
+                sphere.specTrans = Mathf.Abs(math.sin((chance + 1) * Mathf.PI));
+                sphere.emission = float3.zero;
+            // } else {
+            //     sphere.relativeIor = float.MaxValue;
+            //     Color color = UnityEngine.Random.ColorHSV(0, 1, 0, 1, 3, 8);
+            //     sphere.emission = new float3(color.r, color.g, color.b);
+            // }
 
             data[i] = sphere;
         }
@@ -283,7 +287,6 @@ public class RTMgr : MonoBehaviour
             return;
 
         needRebuildComputeBuffer = false;
-        currentSample = 0;
         meshList.Clear();
         verticesList.Clear();
         indicesList.Clear();

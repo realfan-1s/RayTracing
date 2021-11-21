@@ -15,6 +15,7 @@ struct RayHit{
     float3 pos;
     float dist;
     float3 normal;
+    float area;
     float3 albedo;
     float specular;
     float metallic;

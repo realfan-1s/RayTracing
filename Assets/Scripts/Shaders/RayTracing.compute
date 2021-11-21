@@ -1,12 +1,16 @@
-﻿#include "Struct.compute"
-#include "Shading.compute"
+﻿#ifndef _RAY_TRACING_SHADER
+#define _RAY_TRACING_SHADER
 
 #pragma kernel RayTracing
 #pragma multi_compile_local __ _WHITE_STYLE
 #pragma multi_compile_local __ _USE_OUTSIDE_MODEL
 
+#include "Struct.compute"
+#include "Shading.compute"
+
 // Create a RenderTexture with enableRandomWrite flag and set it with cs.SetTexture
 RWTexture2D<float4> Result;
+// RWTexture2D<float4> Distance;
 TextureCube<float4> Skybox;
 // 采样器名称必须和纹理名称完全一致再在前面加上sampler
 SamplerState samplerSkybox;
@@ -19,10 +23,13 @@ StructuredBuffer<Triangle> triangleBuffer;
 float2 Offset;
 float4x4 CameraToWorld;
 float4x4 CameraInverseProjection;
+float2 CameraNearAndFar;
 uint ReflectTimes;
 float4 directionalLight;
 float3 lightColor;
 float randSeed;
+
+#include "sampling.compute"
 
 Ray PrimaryRayFromCam(float2 uv);
 RayHit PathTrace(Ray ray);
@@ -33,14 +40,10 @@ void IntersectObject(Ray ray, inout RayHit hit, MeshObject object);
 bool IntersectAABB(Ray ray, AABB box);
 void TraverseBVH(Ray ray, inout RayHit hit);
 float3 Shading(inout Ray ray, RayHit hit, uint2 idxy);
-float3 HemiSpehereSampling(uint2 idxy, float3 normal, float alpha = 1.0);
-float3 GGXSampling(uint2 idxy, float3 normal, float r2);
-float3x3 ToTangentSpace(float3 normal);
 Ray GenerateRay(float3 position, float3 direction);
 RayHit GenerateRayHit();
-float Rand(uint2 seed);
 
-[numthreads(16, 16, 1)]
+[numthreads(8, 8, 1)]
 void RayTracing (uint3 id : SV_DispatchThreadID)
 {
     uint width, height;
@@ -49,23 +52,17 @@ void RayTracing (uint3 id : SV_DispatchThreadID)
     Ray ray = PrimaryRayFromCam(uv);
 
     float3 result = float3(0.0, 0.0, 0.0);
-    for (uint i = 0; i < ReflectTimes; ++i){
-        RayHit hit = PathTrace(ray);
-        // float isEmssion = dot(hit.emission, float3(1, 1, 1));
-        // if (isEmssion == 0){
-        //     Ray shadowRay = GenerateRay(hit.pos + hit.normal * 0.001, directionalLight.xyz + HemiSpehereSampling(id.xy, hit.normal, 0.0f) * 0.009);
-        //     RayHit shadowHit = PathTrace(shadowRay);
-        //     isEmssion = dot(shadowHit.emission, float3(1, 1, 1));
-        //     if (shadowHit.dist != 1.#INF && isEmssion == 0){
-        //         break;
-        //     }
-        // }
-        result += ray.energy * Shading(ray, hit, id.xy);
+    RayHit hit = PathTrace(ray);
+    result += ray.energy * Shading(ray, hit, id.xy);
+    float dist = (CameraNearAndFar.y - hit.dist) * CameraNearAndFar.x / ((CameraNearAndFar.y - CameraNearAndFar.x) * hit.dist);
 
+    for (uint i = 0; i < ReflectTimes; ++i){
         if (!any(ray.energy))
             break;
+        RayHit hit = PathTrace(ray);
+        result += ray.energy * Shading(ray, hit, id.xy);
     }
-    Result[id.xy] = float4(result, 1.0);
+    Result[id.xy] = float4(result, dist);
 }
 
 Ray GenerateRay(float3 position, float3 direction){
@@ -84,6 +81,7 @@ RayHit GenerateRayHit(){
     hit.specTrans = 0.0;
     hit.specular = 0.0;
     hit.relativeIor = 1.0;
+    hit.area = 0.0;
     hit.pos = float3(0.0, 0.0, 0.0);
     hit.normal = float3(0.0, 0.0, 0.0);
     hit.albedo = float3(0.0, 0.0, 0.0);
@@ -140,7 +138,8 @@ void IntersectSphere(Ray ray, inout RayHit hit, uint index){
     Sphere sphere = sphereBuffer[index];
     float3 dist = ray.pos - sphere.pos;
     float p1 = -dot(ray.dir, dist);
-    float p2 = p1 * p1 - dot(dist, dist) + sphere.radius * sphere.radius;
+    float area = sphere.radius * sphere.radius;
+    float p2 = p1 * p1 - dot(dist, dist) + area;
     if (p2 < 0)
         return;
     p2 = sqrt(p2);
@@ -149,6 +148,7 @@ void IntersectSphere(Ray ray, inout RayHit hit, uint index){
         hit.dist = t;
         hit.pos = ray.pos + t * ray.dir;
         hit.normal = normalize(hit.pos - sphere.pos);
+        hit.area =  2 * PI * area;
         hit.albedo = sphere.albedo;
         hit.specular = sphere.specular;
         hit.metallic = sphere.metallic;
@@ -264,26 +264,24 @@ float3 Shading(inout Ray ray, RayHit hit, uint2 idxy){
             float specularChance = 1 - diffuseChance;
             float3 viewDir = normalize(-ray.dir);
             if (roueltte < diffuseChance){
-                reflection = HemiSpehereSampling(idxy, hit.normal);
+                reflection = HemiSpehereSampling(idxy, hit.normal, 1.0f);
             } else {
                 reflection = GGXSampling(idxy, hit.normal, r2);
                 reflection = 2 * dot(viewDir, reflection) * reflection - viewDir;
                 reflection = normalize(reflection);
             }
-
             float3 halfDir = normalize(reflection + viewDir);
             float ndotl = abs(dot(hit.normal, reflection));
             float ndotv = abs(dot(hit.normal, viewDir));
             float hdotv = abs(dot(halfDir, viewDir));
             float hdotl = abs(dot(halfDir, reflection));
             float ndoth = abs(dot(hit.normal, halfDir));
-
             float3 F0 = lerp(0.08 * hit.specular, hit.albedo, hit.metallic);
             float3 F = SchlickFresnel(hdotv, F0);
             float3 Kd = (1 - hit.metallic) * (1 - F);
             float NDF = NormalDistributeFunction(r2, ndoth);
             float GGX = SmithGGX(hit.roughness, ndotv, ndotl);
-            float3 specularBRDF = F * NDF * GGX * 0.25 / (ndotv * ndotl + 1e-4);
+            float3 specularBRDF = F * NDF * GGX * 0.25 / (ndotv * ndotl + 1e-6);
             float3 diffuseBRDF = Kd * hit.albedo * DiffuseBRDF(hit.roughness, ndotl, ndotv, hdotl);
             float3 totalBRDF = (specularBRDF + diffuseBRDF) * ndotl;
 
@@ -300,11 +298,9 @@ float3 Shading(inout Ray ray, RayHit hit, uint2 idxy){
             float etaI = 1.0;
             float etaT = 1.0 / hit.relativeIor;
             float cosThetaI = clamp(dot(ray.dir, hit.normal), -1, 1);
-
             float3 normalDir = cosThetaI < 0 ? hit.normal : -hit.normal;
             float3 viewDir = normalize(-ray.dir);
             float3 halfDir = GGXSampling(idxy, normalDir, r2);
-
             float specularChance = BSDF_Fresnel(cosThetaI, etaT, etaI);
             float3 refraction;
             if (roueltte < specularChance){
@@ -315,27 +311,31 @@ float3 Shading(inout Ray ray, RayHit hit, uint2 idxy){
                 ray.pos = hit.pos - normalDir * 0.001;
                 float eta = cosThetaI < 0 ? etaI / etaT : etaT / etaI;
                 refraction = normalize(refract(ray.dir, halfDir, eta));
-                halfDir = -normalize(refraction + eta * viewDir);
+                halfDir = normalize(refraction + eta * viewDir);
             }
+            if (dot(viewDir, halfDir) < 0.0)
+                halfDir *= -1;
             ray.dir = refraction;
-
             float ndotl = abs(dot(normalDir, refraction));
             float ndotv = abs(dot(normalDir, viewDir));
             float hdotv = abs(dot(halfDir, viewDir));
             float hdotl = abs(dot(halfDir, refraction));
             float ndoth = abs(dot(normalDir, halfDir));
-
             float NDF = NormalDistributeFunction(r2, ndoth);
             float GGX = SmithGGX(hit.roughness, ndotv, ndotl);
             float3 F0 = 0.08 * hit.specular;
             float3 F = F0 + (1 - F0) * specularChance;
-            float3 specularBTDF = NDF * GGX * F * 0.25 / (ndotv * ndotl + 1e-4);
+            float3 specularBTDF = NDF * GGX * F * 0.25 / (ndotv * ndotl + 1e-7);
             float specualrPDF = ImportanceSampleGGX_PDF(NDF, ndoth, hdotv);
             float3 refractionBTDF = RefractionBTDF(GGX, NDF, F, hdotv, hdotl, ndotv, ndotl, etaT, etaI);
             float3 totalBTDF = (specularBTDF + refractionBTDF * hit.transColor) * ndotl;
-
             if (specualrPDF > 0.0)
                 ray.energy *= totalBTDF / specualrPDF;
+        }
+        if (!any(hit.emission)) {
+            float cosTheta = saturate(dot(hit.normal, -ray.dir));
+            float pdf = hit.dist * hit.dist / (cosTheta * hit.area + 1e-7);
+            return hit.emission / pdf;
         }
         return hit.emission;
 #endif
@@ -345,37 +345,4 @@ float3 Shading(inout Ray ray, RayHit hit, uint2 idxy){
     }
 }
 
-// 单位半球面均匀分布采样点生成和半球上做重要性采样参考http://corysimon.github.io/articles/uniformdistn-on-sphere/
-float3 HemiSpehereSampling(uint2 idxy, float3 normal, float alpha){
-    float cosTheta = pow(Rand(idxy), 1.0 / (alpha + 1.0));
-    float sinTheta = sqrt(saturate(1.0 - cosTheta * cosTheta));
-    float phi = 2 * PI * Rand(idxy);
-    float3 samplingDir = float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
-    return mul(samplingDir, ToTangentSpace(normal));
-}
-
-float3 GGXSampling(uint2 idxy, float3 normal, float r2){
-    float random1 = Rand(idxy);
-    float random2 = Rand(idxy);
-    float cosTheta = sqrt((1.0 - random1) / (1.0 + (r2 * r2 - 1.0) * random1));
-    float sinTheta = sqrt(saturate(1.0 - cosTheta * cosTheta));
-    float phi = 2 * PI * random2;
-    float3 samplingDir = float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
-    return mul(samplingDir, ToTangentSpace(normal));
-}
-
-float3x3 ToTangentSpace(float3 normal){
-    float3 assist = float3(1.0, 0.0, 0.0);
-    if (abs(normal.x) > 0.99)
-        assist = float3(0.0, 0.0, 1.0);
-
-    float3 tangent = normalize(cross(normal, assist));
-    float3 binormal = normalize(cross(normal, tangent));
-    return float3x3(tangent, binormal, normal);
-}
-
-float Rand(uint2 seed){
-    float result = frac(sin(randSeed / 100.0 * dot(seed, float2(12.9898, 78.233))) * 43758.5453);
-    randSeed += 1.0;
-    return result;
-}
+#endif

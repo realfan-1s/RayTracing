@@ -26,7 +26,7 @@ float GTR2Shadow(float r2, float ndoth){
     float a2 = r2 * r2;
     float cosTheta = ndoth * ndoth;
     float density =  1.0 + (a2 - 1.0) * cosTheta;
-    return a2 * INV_PI / (density * density);
+    return a2 * INV_PI / (density * density + 1e-7);
 }
 
 float NormalDistributeFunction(float r2, float ndoth){
