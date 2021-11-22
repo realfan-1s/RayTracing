@@ -110,7 +110,6 @@ inline float2 GetNeighborPixel(float2 uv) {
 }
 
 float4 frag(v2f o) : SV_TARGET{
-    // TODO:TAA抗锯齿
     float2 uv = o.uv.xy;
     const float2 k = _MainTex_TexelSize.xy;
     // 先计算运动矢量
@@ -123,7 +122,7 @@ float4 frag(v2f o) : SV_TARGET{
 #endif
     float4 col = tex2D(_MainTex, uv);
     float3 currCol = col.rgb;
-    // // 色彩锐化
+    // 色彩锐化
     float4x4 top = float4x4(
         tex2D(_MainTex, uv - k), // TopLeft
         tex2D(_MainTex, uv + float2(0, -k.y)), // TopMiddle
@@ -138,7 +137,7 @@ float4 frag(v2f o) : SV_TARGET{
     currCol += (currCol - corner) * _SharpAmount;
     currCol = max(0, currCol);
 
-    // // ToneMap
+    // ToneMap
     currCol = ToneMap(currCol);
     top[0] = float4(ToneMap(top[0].rgb), 1.0f);
     top[1] = float4(ToneMap(top[1].rgb), 1.0f);

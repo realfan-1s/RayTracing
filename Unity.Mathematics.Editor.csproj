@@ -36,8 +36,8 @@
     <ImplicitlyExpandDesignTimeFacades>false</ImplicitlyExpandDesignTimeFacades>
   </PropertyGroup>
   <ItemGroup>
-     <Compile Include="Library\PackageCache\com.unity.mathematics@1.2.5\Unity.Mathematics.Editor\MatrixDrawer.cs" />
      <Compile Include="Library\PackageCache\com.unity.mathematics@1.2.5\Unity.Mathematics.Editor\PrimitiveVectorDrawer.cs" />
+     <Compile Include="Library\PackageCache\com.unity.mathematics@1.2.5\Unity.Mathematics.Editor\MatrixDrawer.cs" />
      <Compile Include="Library\PackageCache\com.unity.mathematics@1.2.5\Unity.Mathematics.Editor\PostNormalizedVectorDrawer.cs" />
      <Compile Include="Library\PackageCache\com.unity.mathematics@1.2.5\Unity.Mathematics.Editor\QuaternionDrawer.cs" />
      <None Include="Library\PackageCache\com.unity.mathematics@1.2.5\Unity.Mathematics.Editor\Unity.Mathematics.Editor.asmdef" />

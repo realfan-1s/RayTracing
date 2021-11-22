@@ -381,7 +381,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   speed: 20
-  axisSensitivity: 50
+  axisSensitivity: 30
 --- !u!1001 &3304984729771576551
 PrefabInstance:
   m_ObjectHideFlags: 0

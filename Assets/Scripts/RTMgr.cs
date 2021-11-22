@@ -61,6 +61,7 @@ public class RTMgr : MonoBehaviour
     private void Awake() {
         kernelRayTracing = rayTracingCS.FindKernel("RayTracing");
         sphereBuffer = new ComputeBuffer((int)sphereCount, 72, ComputeBufferType.Append);
+        Camera.main.depthTextureMode = DepthTextureMode.Depth | DepthTextureMode.MotionVectors;
     }
 
     private void Start() {

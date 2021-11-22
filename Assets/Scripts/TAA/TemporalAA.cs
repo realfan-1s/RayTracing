@@ -54,21 +54,18 @@ public static class TemporalAA
         buffer.format = RenderTextureFormat.ARGBFloat;
         buffer.Create();
     }
-    // public static void Render() {
-
-    // }
     public static void PostRender() {
         renderCamera.ResetProjectionMatrix();
-        _prevProjection = renderCamera.nonJitteredProjectionMatrix;
     }
     public static Vector2 OnPreCull() {
         Vector2 jitter = GenerateRandomOffset();
         jitter *= taaSetting.jitter.spread;
         renderCamera.nonJitteredProjectionMatrix = renderCamera.projectionMatrix;
-        _nonJitterProjection = renderCamera.nonJitteredProjectionMatrix;
         renderCamera.projectionMatrix = GetPerspectiveMatrix(jitter);
         jitter.x /= renderCamera.pixelWidth;
         jitter.y /= renderCamera.pixelHeight;
+        _prevProjection = renderCamera.previousViewProjectionMatrix;
+        _nonJitterProjection = renderCamera.nonJitteredProjectionMatrix * renderCamera.worldToCameraMatrix;
         return jitter;
     }
 
@@ -92,7 +89,6 @@ public static class TemporalAA
         return result;
     }
 
-    // TODO: Why? 和unreal 实现不同
     // http://graphics.cs.williams.edu/papers/MotionBlurI3D12/McGuire12Blur.pdf
     // http://www.youtube.com/watch?v=WzpLWzGvFK4&t=18m
     private static float4x4 GetPerspectiveMatrix(float2 offset) {
@@ -100,28 +96,10 @@ public static class TemporalAA
         float horizontal = vertical * renderCamera.aspect;
         offset.x *= horizontal / (0.5f * renderCamera.pixelWidth);
         offset.y *= vertical / (0.5f * renderCamera.pixelHeight);
-        float left = offset.x - horizontal;
-        float right = offset.x + horizontal;
-        float top = offset.y + vertical;
-        float bottom = offset.y - vertical;
 
-        float4x4 matrix = new float4x4();
-        matrix[0][0] = 2.0f / (right - left);
-        matrix[0][1] = 0.0f;
-        matrix[0][2] = (right + left) / (right - left);
-        matrix[0][3] = 0.0f;
-        matrix[1][0] = 0.0f;
-        matrix[1][1] = 2.0f / (top - bottom);
-        matrix[1][2] = (top + bottom) / (top - bottom);
-        matrix[1][3] = 0.0f;
-        matrix[2][0] = 0.0f;
-        matrix[2][1] = 0.0f;
-        matrix[2][2] = -(renderCamera.farClipPlane + renderCamera.nearClipPlane) / (renderCamera.farClipPlane - renderCamera.nearClipPlane);
-        matrix[2][3] = -(2.0f * renderCamera.farClipPlane * renderCamera.nearClipPlane) / (renderCamera.farClipPlane - renderCamera.nearClipPlane);
-        matrix[3][0] = 0.0f;
-        matrix[3][1] = 0.0f;
-        matrix[3][2] = -1.0f;
-        matrix[3][3] = 0.0f;
+        float4x4 matrix = renderCamera.projectionMatrix;
+        matrix[0][2] += (offset.x * 2 - 1.0f) / renderCamera.pixelWidth;
+        matrix[1][2] += (offset.y * 2 - 1.0f) / renderCamera.pixelHeight;
         return matrix;
     }
 }

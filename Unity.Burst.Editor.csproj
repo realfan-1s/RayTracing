@@ -36,22 +36,22 @@
     <ImplicitlyExpandDesignTimeFacades>false</ImplicitlyExpandDesignTimeFacades>
   </PropertyGroup>
   <ItemGroup>
-     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstDisassembler.Core.Wasm.cs" />
-     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstDisassembler.Core.cs" />
      <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstDisassembler.Core.LLVMIR.cs" />
-     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstMenu.cs" />
-     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstDisassembler.Core.x86.cs" />
-     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstCompileTarget.cs" />
-     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstDisassembler.Core.ARM64.cs" />
-     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstLoader.cs" />
-     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\LongTextArea.cs" />
      <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstEditorUtility.cs" />
-     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstInspectorGUI.cs" />
      <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstDisassembler.cs" />
+     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstDisassembler.Core.cs" />
+     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstDisassembler.Core.x86.cs" />
+     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstDisassembler.Core.ARM64.cs" />
+     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstInspectorGUI.cs" />
      <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstReflection.cs" />
      <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstAotSettings.cs" />
      <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstEditorOptions.cs" />
      <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstAotCompiler.cs" />
+     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstDisassembler.Core.Wasm.cs" />
+     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstMenu.cs" />
+     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstCompileTarget.cs" />
+     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\BurstLoader.cs" />
+     <Compile Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\LongTextArea.cs" />
      <None Include="Library\PackageCache\com.unity.burst@1.4.11\Editor\Unity.Burst.Editor.asmdef" />
     <Reference Include="UnityEngine">
         <HintPath>G:/Unity/2020.3.14f1c1/Editor/Data/Managed/UnityEngine/UnityEngine.dll</HintPath>

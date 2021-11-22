@@ -4,7 +4,6 @@
 sampler2D _MainTex;
 float4x4 _NonJitterVP;
 float4x4 _previousVP;
-float _MotionVectorDepthBias;
 
 struct Input
 {
@@ -30,10 +29,9 @@ v2f VertMotionVectors(Input input) {
     return o;
 }
 
-inline float2 CalculateMotion(float depth, float3 inRay) {
-    float3 ray = inRay * (_ProjectionParams.z / inRay.z); // 获得远平面距离
-    float3 screenPos = depth * ray;
-    float4 worldPos = mul(unity_CameraToWorld, screenPos);
+inline float2 CalculateMotion(float3 ray) {
+    float3 screenPos = ray * (_ProjectionParams.z / ray.z); // 获得远平面距离
+    float4 worldPos = mul(unity_CameraToWorld, float4(screenPos, 1.0f));
     // 计算前一帧和当前帧的裁剪平面坐标
     float4 prevClipPos = mul(_previousVP, worldPos);
     float4 currClipPos = mul(_NonJitterVP, worldPos);
@@ -43,10 +41,8 @@ inline float2 CalculateMotion(float depth, float3 inRay) {
     return screenCurrPos - screenPrevPos;
 }
 
-float4 FragMotionVectors(v2f o, out float outDepth : SV_DEPTH) : SV_TARGET {
-    float depth = tex2D(_MainTex, o.uv).a;
-    outDepth = depth;
-    return float4(CalculateMotion(depth, o.ray), 0, 1);
+float4 FragMotionVectors(v2f o) : SV_TARGET {
+    return float4(CalculateMotion(o.ray), 0, 1);
 }
 
 #endif
